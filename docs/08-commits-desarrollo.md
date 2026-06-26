@@ -47,9 +47,9 @@ test: cubrir calculo de cuotas e intereses
 | Version | Commit sugerido | Descripcion |
 |---|---|---|
 | v0.1 | docs | Documentacion base del sistema. |
-| v0.2 | feat/build | App Tauri + React + SQLite. |
-| v0.3 | feat/security | Usuarios, roles y permisos. |
-| v0.4 | feat | Personas, prestamistas y asociados. |
+| v0.2 | feat/build | Dashboard web ejecutable de validacion visual. |
+| v0.3 | feat | Backend local v0 con reglas base, caja, prestamos, pagos y auditoria. |
+| v0.4 | feat/build | App Tauri + React + SQLite. |
 | v0.5 | feat | Prestamos y cronograma. |
 | v0.6 | feat | Pagos y cuotas. |
 | v0.7 | feat | Caja y cierres. |
@@ -65,4 +65,3 @@ test: cubrir calculo de cuotas e intereses
 - Cambios de caja deben incluir auditoria.
 - Cambios de boleta deben incluir vista previa verificada.
 - Cambios de backup deben probar restauracion.
-

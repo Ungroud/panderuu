@@ -19,6 +19,7 @@ La prioridad es que los administradores puedan controlar prestamistas, asociados
 | `07-versiones-feats.md` | Roadmap de versiones y funcionalidades. |
 | `08-commits-desarrollo.md` | Convencion de commits y registro de desarrollo. |
 | `09-subagentes-desarrollo.md` | Division de subagentes, scripts y fases de implementacion. |
+| `10-backend-real.md` | Backend local v0, reglas codificadas, API y puntos pendientes de aprobacion. |
 
 ## Cambios clave
 
@@ -32,6 +33,7 @@ La prioridad es que los administradores puedan controlar prestamistas, asociados
 - Se agregan pagos de cuotas, cierre de multiples cuotas y prioridad de pagos del dia.
 - Se agregan boletas impresas con vista previa.
 - Se agregan auditoria, backups y validaciones.
+- Se agrega backend local v0 con reglas de negocio probadas y almacenamiento persistente JSON para arrancar desde lo basico.
 
 ## Supuestos aprobados
 

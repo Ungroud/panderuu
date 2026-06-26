@@ -16,6 +16,11 @@ if ((Test-Path (Join-Path $root 'src')) -and (Test-PanderuuCommand 'npm')) {
   Invoke-PanderuuChecked -FilePath 'npm' -Arguments @('run', 'test:app') -WorkingDirectory $root
 }
 
+if ((Test-Path (Join-Path $root 'backend\test.mjs')) -and (Test-PanderuuCommand 'node')) {
+  Write-PanderuuStep 'Pruebas backend'
+  Invoke-PanderuuChecked -FilePath 'npm' -Arguments @('run', 'backend:test') -WorkingDirectory $root
+}
+
 if ((Test-Path (Join-Path $root 'src-tauri\Cargo.toml')) -and (Test-PanderuuCommand 'cargo')) {
   Write-PanderuuStep 'Pruebas Rust'
   Invoke-PanderuuChecked -FilePath 'cargo' -Arguments @('test') -WorkingDirectory (Join-Path $root 'src-tauri')

@@ -62,7 +62,8 @@ function Get-PanderuuRequiredDocs {
     'docs/06-seguridad-auditoria.md',
     'docs/07-versiones-feats.md',
     'docs/08-commits-desarrollo.md',
-    'docs/09-subagentes-desarrollo.md'
+    'docs/09-subagentes-desarrollo.md',
+    'docs/10-backend-real.md'
   )
 }
 
@@ -79,6 +80,8 @@ function Get-PanderuuAppState {
     HasSrc = Test-Path (Join-Path $root 'src')
     HasTauri = Test-Path (Join-Path $root 'src-tauri')
     HasMigrations = Test-Path (Join-Path $root 'src-tauri\migrations')
+    HasBackend = Test-Path (Join-Path $root 'backend\server.mjs')
+    HasBackendStorage = Test-Path (Join-Path $root '.data\backend\panderuu.json')
     HasNodeModules = Test-Path (Join-Path $root 'node_modules')
     HasPackageLock = Test-Path (Join-Path $root 'package-lock.json')
     HasDataDir = Test-Path (Join-Path $root '.data')
@@ -96,4 +99,3 @@ Export-ModuleMember -Function `
   Get-PanderuuRequiredDocs, `
   Test-PanderuuFile, `
   Get-PanderuuAppState
-
