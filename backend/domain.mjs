@@ -125,6 +125,57 @@ export function createPerson(state, actor, payload) {
   return person;
 }
 
+export function createAdmin(state, actor, payload) {
+  ensureStateCollections(state);
+  requireAdminLevel(actor, 3, 'administradores.crear');
+  const adminLevel = Number(payload.adminLevel);
+  if (![1, 2, 3].includes(adminLevel)) throw validation('El nivel de administrador debe ser 1, 2 o 3');
+
+  const roles = uniqueRoles(['Administrador', ...(Array.isArray(payload.roles) ? payload.roles : [])]);
+  const person = createPerson(state, actor, {
+    ...payload,
+    roles
+  });
+  const admin = {
+    id: id('admin'),
+    name: person.name,
+    adminLevel,
+    seedAdmin: false,
+    personId: person.id,
+    createdBy: actor.id,
+    createdAt: nowIso(),
+    status: 'activo'
+  };
+
+  state.actors.unshift(admin);
+  createAudit(state, actor, 'administradores.crear', 'actores', admin.id, 'ok', {
+    personId: person.id,
+    adminLevel,
+    roles: person.roles
+  });
+  return { admin, person };
+}
+
+export function administrators(state) {
+  ensureStateCollections(state);
+  return state.actors
+    .filter((actor) => Number(actor.adminLevel) > 0)
+    .map((actor) => {
+      const person = actor.personId ? state.people.find((item) => item.id === actor.personId) : null;
+      return {
+        id: actor.id,
+        name: actor.name,
+        adminLevel: Number(actor.adminLevel),
+        seedAdmin: Boolean(actor.seedAdmin),
+        status: actor.status || 'activo',
+        personId: actor.personId || null,
+        createdBy: actor.createdBy || 'system',
+        createdAt: actor.createdAt || '',
+        person
+      };
+    });
+}
+
 export function createLoan(state, actor, payload) {
   ensureStateCollections(state);
   requireAdminLevel(actor, 2, 'prestamos.crear');
@@ -385,6 +436,10 @@ function createReceipt(state, actor, loan, payment) {
 function ensureStateCollections(state) {
   state.quotas ||= [];
   state.paymentApplications ||= [];
+}
+
+function uniqueRoles(roles) {
+  return [...new Set(roles.filter(Boolean).map((role) => String(role).trim()).filter(Boolean))];
 }
 
 function createLoanQuotas(loan, installmentCount, loanDate) {

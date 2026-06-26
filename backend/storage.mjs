@@ -5,11 +5,11 @@ export const defaultPath = '.data/backend/panderuu.json';
 
 export function seedState() {
   return {
-    version: 3,
+    version: 4,
     actors: [
-      { id: 'admin-seed', name: 'Admin Semilla', adminLevel: 3, seedAdmin: true },
-      { id: 'admin-caja', name: 'Caja Nivel 2', adminLevel: 2 },
-      { id: 'admin-reportes', name: 'Informes Nivel 1', adminLevel: 1 }
+      { id: 'admin-seed', name: 'Admin Semilla', adminLevel: 3, seedAdmin: true, personId: null, createdBy: 'system', createdAt: new Date().toISOString(), status: 'activo' },
+      { id: 'admin-caja', name: 'Caja Nivel 2', adminLevel: 2, personId: null, createdBy: 'admin-seed', createdAt: new Date().toISOString(), status: 'activo' },
+      { id: 'admin-reportes', name: 'Informes Nivel 1', adminLevel: 1, personId: null, createdBy: 'admin-seed', createdAt: new Date().toISOString(), status: 'activo' }
     ],
     people: [
       {

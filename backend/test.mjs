@@ -6,8 +6,10 @@ import {
   DAILY_MORA_RATE,
   INITIAL_LOAN_LIMIT_CENTS,
   addCashIncome,
+  administrators,
   cashBalanceCents,
   closeCash,
+  createAdmin,
   createLoan,
   createPerson,
   dailyMoraCents,
@@ -23,6 +25,7 @@ import { loadSqliteState, withSqliteStateTransaction } from './sqlite-storage.mj
 const state = seedState();
 const admin1 = state.actors.find((actor) => actor.adminLevel === 1);
 const admin2 = state.actors.find((actor) => actor.adminLevel === 2);
+const admin3 = state.actors.find((actor) => actor.adminLevel === 3);
 
 assert.equal(BASE_RATE_PERCENT, 5);
 assert.equal(DAILY_MORA_RATE, 0.001);
@@ -51,6 +54,50 @@ const person = createPerson(state, admin2, {
   roles: ['Prestamista']
 });
 assert.equal(person.creditStatus, 'nuevo');
+
+assert.throws(
+  () =>
+    createAdmin(state, admin2, {
+      type: 'natural',
+      name: 'Admin Bloqueado',
+      document: 'DNI 70000997',
+      phone: '999 000 222',
+      email: 'bloqueado@example.local',
+      address: 'Direccion bloqueada',
+      adminLevel: 1
+    }),
+  /permisos no autorizados/
+);
+
+assert.throws(
+  () =>
+    createAdmin(state, admin3, {
+      type: 'natural',
+      name: 'Admin Nivel Incorrecto',
+      document: 'DNI 70000996',
+      phone: '999 000 333',
+      email: 'nivel@example.local',
+      address: 'Direccion nivel',
+      adminLevel: 4
+    }),
+  /debe ser 1, 2 o 3/
+);
+
+const createdAdmin = createAdmin(state, admin3, {
+  type: 'natural',
+  name: 'Admin Operativo',
+  document: 'DNI 70000995',
+  phone: '999 000 444',
+  email: 'operativo@example.local',
+  address: 'Direccion operativo',
+  roles: ['Prestamista'],
+  adminLevel: 2
+});
+assert.equal(createdAdmin.admin.adminLevel, 2);
+assert.equal(createdAdmin.admin.status, 'activo');
+assert.equal(createdAdmin.admin.personId, createdAdmin.person.id);
+assert.deepEqual(createdAdmin.person.roles, ['Administrador', 'Prestamista']);
+assert.ok(administrators(state).some((admin) => admin.id === createdAdmin.admin.id && admin.person?.document === 'DNI 70000995'));
 
 assert.throws(
   () =>
@@ -189,7 +236,24 @@ try {
   const stateAfterPerson = loadSqliteState(sqlitePath);
   assert.ok(stateAfterPerson.people.some((item) => item.id === persistedPerson.id));
 
-  const balanceBeforeRollback = cashBalanceCents(stateAfterPerson);
+  const persistedAdmin = withSqliteStateTransaction(sqlitePath, (txState) => {
+    const actor = txState.actors.find((item) => item.id === 'admin-seed');
+    return createAdmin(txState, actor, {
+      type: 'natural',
+      name: 'Admin SQLite',
+      document: 'DNI 71000002',
+      phone: '999 123 457',
+      email: 'admin.sqlite@example.local',
+      address: 'Direccion Admin SQLite',
+      adminLevel: 1
+    });
+  });
+
+  const stateAfterAdmin = loadSqliteState(sqlitePath);
+  assert.ok(stateAfterAdmin.actors.some((item) => item.id === persistedAdmin.admin.id && item.personId === persistedAdmin.person.id));
+  assert.ok(stateAfterAdmin.people.some((item) => item.id === persistedAdmin.person.id && item.roles.includes('Administrador')));
+
+  const balanceBeforeRollback = cashBalanceCents(stateAfterAdmin);
   assert.throws(
     () =>
       withSqliteStateTransaction(

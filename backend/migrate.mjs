@@ -28,6 +28,7 @@ try {
         migrations: summary,
         counts: {
           actors: state.actors.length,
+          admins: state.actors.filter((actor) => Number(actor.adminLevel) > 0).length,
           people: state.people.length,
           loans: state.loans.length,
           quotas: state.quotas.length,

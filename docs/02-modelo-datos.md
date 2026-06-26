@@ -86,6 +86,25 @@ El modelo documental completo se mantiene como direccion final; el backend v0 im
 | created_by | uuid | Administrador que creo. |
 | created_at | datetime | Registro. |
 
+En backend v0, los usuarios administradores viven en:
+
+```text
+actors
+```
+
+Campos actuales:
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | text | Identificador del actor/admin. |
+| name | text | Nombre visible. |
+| admin_level | integer | Nivel 1, 2 o 3. |
+| seed_admin | integer | Marca administrador semilla. |
+| person_id | text | Persona vinculada cuando fue creada por formulario. |
+| created_by | text | Administrador que lo creo. |
+| created_at | text | Fecha de creacion. |
+| status | text | `activo` por defecto. |
+
 ## Roles y permisos
 
 Roles base:

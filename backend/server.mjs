@@ -3,8 +3,10 @@ import { URL } from 'node:url';
 import {
   PERMISSION_ERROR,
   addCashIncome,
+  administrators,
   closeCash,
   createAudit,
+  createAdmin,
   createLoan,
   createPerson,
   dashboard,
@@ -41,11 +43,13 @@ function route(method, path, handler) {
 const routes = [
   route('GET', '/health', ({ state }) => ({ ok: true, service: 'panderuu-backend', storage: dbPath, engine: 'sqlite', version: state.version })),
   route('GET', '/dashboard', ({ state }) => dashboard(state)),
+  route('GET', '/admins', ({ state }) => administrators(state)),
   route('GET', '/state', ({ state }) => {
     refreshQuotaStatuses(state);
     return state;
   }),
   route('GET', '/quotas', ({ state }) => refreshQuotaStatuses(state)),
+  route('POST', '/admins', ({ state, actor, payload }) => createAdmin(state, actor, payload)),
   route('POST', '/people', ({ state, actor, payload }) => createPerson(state, actor, payload)),
   route('POST', '/loans', ({ state, actor, payload }) => createLoan(state, actor, payload)),
   route('POST', '/payments', ({ state, actor, payload }) => registerPayment(state, actor, payload)),

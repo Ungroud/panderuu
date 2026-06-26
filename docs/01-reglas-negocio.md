@@ -23,6 +23,17 @@ Reglas:
 - Solo nivel 3 puede crear otros administradores.
 - Los administradores creados despues deben quedar ligados al administrador que los registro.
 
+Regla implementada en backend v0:
+
+```text
+Solo un administrador nivel 3 puede crear administradores.
+El nuevo administrador debe quedar registrado como persona con rol Administrador.
+El nivel asignado debe ser 1, 2 o 3.
+Todo intento de nivel 1 o 2 para crear administradores responde "permisos no autorizados".
+```
+
+Un administrador tambien puede tener rol `Prestamista` si se desea habilitarlo para recibir prestamos.
+
 ### Permisos por nivel
 
 | Accion | Nivel 1 | Nivel 2 | Nivel 3 |

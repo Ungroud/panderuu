@@ -151,6 +151,16 @@ export const migrations = [
     sql: `
       ALTER TABLE receipts ADD COLUMN mora_cents INTEGER NOT NULL DEFAULT 0;
     `
+  },
+  {
+    version: 4,
+    name: '004_admin_metadata',
+    sql: `
+      ALTER TABLE actors ADD COLUMN person_id TEXT;
+      ALTER TABLE actors ADD COLUMN created_by TEXT NOT NULL DEFAULT 'system';
+      ALTER TABLE actors ADD COLUMN created_at TEXT NOT NULL DEFAULT '';
+      ALTER TABLE actors ADD COLUMN status TEXT NOT NULL DEFAULT 'activo';
+    `
   }
 ];
 
@@ -266,14 +276,22 @@ export function migrationSummary(db) {
 
 export function readStateFromDb(db) {
   return {
-    version: 3,
+    version: 4,
     actors: db
-      .prepare('SELECT id, name, admin_level AS adminLevel, seed_admin AS seedAdmin FROM actors ORDER BY rowid')
+      .prepare(
+        `SELECT id, name, admin_level AS adminLevel, seed_admin AS seedAdmin,
+          person_id AS personId, created_by AS createdBy, created_at AS createdAt, status
+        FROM actors ORDER BY rowid`
+      )
       .all()
       .map((actor) => ({
         ...actor,
         adminLevel: Number(actor.adminLevel),
-        seedAdmin: Boolean(actor.seedAdmin)
+        seedAdmin: Boolean(actor.seedAdmin),
+        personId: actor.personId || null,
+        createdBy: actor.createdBy || 'system',
+        createdAt: actor.createdAt || '',
+        status: actor.status || 'activo'
       })),
     people: db
       .prepare(
@@ -396,9 +414,18 @@ export function writeStateToDb(db, state) {
     DELETE FROM actors;
   `);
 
-  const insertActor = db.prepare('INSERT INTO actors (id, name, admin_level, seed_admin) VALUES (?, ?, ?, ?)');
+  const insertActor = db.prepare('INSERT INTO actors (id, name, admin_level, seed_admin, person_id, created_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
   for (const actor of state.actors) {
-    insertActor.run(actor.id, actor.name, Number(actor.adminLevel), actor.seedAdmin ? 1 : 0);
+    insertActor.run(
+      actor.id,
+      actor.name,
+      Number(actor.adminLevel),
+      actor.seedAdmin ? 1 : 0,
+      actor.personId || null,
+      actor.createdBy || 'system',
+      actor.createdAt || '',
+      actor.status || 'activo'
+    );
   }
 
   const insertPerson = db.prepare(`

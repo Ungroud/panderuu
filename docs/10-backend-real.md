@@ -42,6 +42,15 @@ Si un usuario intenta una accion superior a su nivel:
 permisos no autorizados
 ```
 
+Administradores:
+
+```text
+Solo nivel 3 puede crear administradores.
+El administrador creado queda vinculado a una persona con rol Administrador.
+El nivel permitido es 1, 2 o 3.
+El administrador puede incluir rol Prestamista si tambien podra recibir prestamos.
+```
+
 Personas:
 
 ```text
@@ -136,8 +145,10 @@ Endpoints:
 |---|---|---|
 | GET | `/health` | Verifica que el backend este vivo. |
 | GET | `/dashboard` | Devuelve resumen de caja, prestamos, pagos y boletas. |
+| GET | `/admins` | Devuelve administradores y persona vinculada cuando existe. |
 | GET | `/state` | Devuelve el estado completo para depuracion local. |
 | GET | `/quotas` | Devuelve cuotas con estados actualizados por fecha. |
+| POST | `/admins` | Crea administradores; requiere nivel 3. |
 | POST | `/people` | Crea prestamistas/asociados. |
 | POST | `/loans` | Crea prestamos y descuenta caja. |
 | POST | `/payments` | Registra pagos, genera caja y boleta. |
