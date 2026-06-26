@@ -1,0 +1,34 @@
+# Runtime data
+.data/
+*.db
+*.db-shm
+*.db-wal
+
+# Node
+node_modules/
+npm-debug.log*
+pnpm-lock.yaml
+yarn.lock
+
+# Frontend build
+dist/
+build/
+.vite/
+coverage/
+
+# Tauri/Rust
+src-tauri/target/
+target/
+Cargo.lock
+
+# Local environment
+.env
+.env.local
+.env.*.local
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+

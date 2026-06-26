@@ -18,6 +18,7 @@ La prioridad es que los administradores puedan controlar prestamistas, asociados
 | `06-seguridad-auditoria.md` | Controles, riesgos, permisos, backups y datos sensibles. |
 | `07-versiones-feats.md` | Roadmap de versiones y funcionalidades. |
 | `08-commits-desarrollo.md` | Convencion de commits y registro de desarrollo. |
+| `09-subagentes-desarrollo.md` | Division de subagentes, scripts y fases de implementacion. |
 
 ## Cambios clave
 
@@ -47,4 +48,3 @@ El workspace local se usa como base documental del proyecto. Cuando se autorice 
 ```text
 https://github.com/Ungroud/panderuu.git
 ```
-

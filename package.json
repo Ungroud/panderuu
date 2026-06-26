@@ -1,0 +1,23 @@
+{
+  "name": "panderuu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Panderuu desktop loan management software documentation and development orchestration.",
+  "scripts": {
+    "agents": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agents.ps1",
+    "backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup.ps1",
+    "bootstrap": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1",
+    "build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1",
+    "check": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check.ps1",
+    "db:migrate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/db-migrate.ps1",
+    "db:reset": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/db-reset.ps1",
+    "db:seed": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/db-seed.ps1",
+    "dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1",
+    "format": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/format.ps1",
+    "lint": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/lint.ps1",
+    "release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1",
+    "status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/status.ps1",
+    "test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test.ps1",
+    "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1"
+  }
+}
