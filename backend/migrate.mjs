@@ -1,0 +1,50 @@
+import {
+  defaultSqlitePath,
+  ensureSeeded,
+  loadSqliteState,
+  migrateDatabase,
+  migrationSummary,
+  openDatabase
+} from './sqlite-storage.mjs';
+
+const args = process.argv.slice(2);
+const dbPath = valueAfter('--db') || process.env.PANDERUU_DB_SQLITE || defaultSqlitePath;
+const dryRun = args.includes('--dry-run');
+
+const db = openDatabase(dbPath);
+try {
+  migrateDatabase(db);
+  const seeded = dryRun ? false : ensureSeeded(db);
+  const summary = migrationSummary(db);
+  const state = loadSqliteState(dbPath);
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        dbPath,
+        dryRun,
+        seeded,
+        migrations: summary,
+        counts: {
+          actors: state.actors.length,
+          people: state.people.length,
+          loans: state.loans.length,
+          payments: state.payments.length,
+          cashMovements: state.cashMovements.length,
+          auditEvents: state.auditEvents.length
+        }
+      },
+      null,
+      2
+    )
+  );
+} finally {
+  db.close();
+}
+
+function valueAfter(name) {
+  const index = args.indexOf(name);
+  if (index < 0) return '';
+  return args[index + 1] || '';
+}

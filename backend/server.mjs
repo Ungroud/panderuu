@@ -10,14 +10,12 @@ import {
   dashboard,
   registerPayment
 } from './domain.mjs';
-import { defaultPath, loadState, saveState } from './storage.mjs';
+import { defaultSqlitePath, loadSqliteState, withSqliteStateTransaction } from './sqlite-storage.mjs';
 
 const port = Number(process.env.PANDERUU_BACKEND_PORT || 5180);
-const dbPath = process.env.PANDERUU_DB_JSON || defaultPath;
+const dbPath = process.env.PANDERUU_DB_SQLITE || defaultSqlitePath;
 
-let state = await loadState(dbPath);
-
-function actorFromRequest(request) {
+function actorFromState(state, request) {
   const actorId = request.headers['x-actor-id'] || 'admin-seed';
   const actor = state.actors.find((item) => item.id === actorId);
   return actor || { id: 'anonymous', name: 'anonymous', adminLevel: 0 };
@@ -40,14 +38,14 @@ function route(method, path, handler) {
 }
 
 const routes = [
-  route('GET', '/health', async () => ({ ok: true, service: 'panderuu-backend', storage: dbPath })),
-  route('GET', '/dashboard', async () => dashboard(state)),
-  route('GET', '/state', async () => state),
-  route('POST', '/people', async (request, actor) => createPerson(state, actor, await readJson(request))),
-  route('POST', '/loans', async (request, actor) => createLoan(state, actor, await readJson(request))),
-  route('POST', '/payments', async (request, actor) => registerPayment(state, actor, await readJson(request))),
-  route('POST', '/cash/income', async (request, actor) => addCashIncome(state, actor, await readJson(request))),
-  route('POST', '/cash/close', async (request, actor) => closeCash(state, actor, await readJson(request)))
+  route('GET', '/health', ({ state }) => ({ ok: true, service: 'panderuu-backend', storage: dbPath, engine: 'sqlite', version: state.version })),
+  route('GET', '/dashboard', ({ state }) => dashboard(state)),
+  route('GET', '/state', ({ state }) => state),
+  route('POST', '/people', ({ state, actor, payload }) => createPerson(state, actor, payload)),
+  route('POST', '/loans', ({ state, actor, payload }) => createLoan(state, actor, payload)),
+  route('POST', '/payments', ({ state, actor, payload }) => registerPayment(state, actor, payload)),
+  route('POST', '/cash/income', ({ state, actor, payload }) => addCashIncome(state, actor, payload)),
+  route('POST', '/cash/close', ({ state, actor, payload }) => closeCash(state, actor, payload))
 ];
 
 const server = createServer(async (request, response) => {
@@ -68,14 +66,14 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  const actor = actorFromRequest(request);
   try {
-    const result = await found.handler(request, actor);
-    await saveState(state, dbPath);
+    const result =
+      request.method === 'GET'
+        ? await handleReadRoute(found, request)
+        : await handleWriteRoute(found, request);
     send(response, 200, { ok: true, data: result });
   } catch (error) {
-    createAudit(state, actor, error.action || `${request.method} ${url.pathname}`, 'request', url.pathname, 'failed', { message: error.message });
-    await saveState(state, dbPath);
+    recordFailedRequest(request, url.pathname, error);
     const status = error.message === PERMISSION_ERROR ? 403 : error.code === 'VALIDATION_ERROR' ? 400 : 500;
     send(response, status, { ok: false, error: error.message, code: error.code || 'INTERNAL_ERROR' });
   }
@@ -83,6 +81,32 @@ const server = createServer(async (request, response) => {
 
 server.listen(port, '0.0.0.0', () => {
   console.log(`Panderuu backend: http://localhost:${port}`);
-  console.log(`Storage: ${dbPath}`);
+  console.log(`SQLite: ${dbPath}`);
 });
 
+async function handleReadRoute(found, request) {
+  const state = loadSqliteState(dbPath);
+  const actor = actorFromState(state, request);
+  return found.handler({ request, actor, state, payload: null });
+}
+
+async function handleWriteRoute(found, request) {
+  const payload = await readJson(request);
+  return withSqliteStateTransaction(dbPath, (state) => {
+    const actor = actorFromState(state, request);
+    return found.handler({ request, actor, state, payload });
+  });
+}
+
+function recordFailedRequest(request, pathname, error) {
+  try {
+    withSqliteStateTransaction(dbPath, (state) => {
+      const actor = actorFromState(state, request);
+      createAudit(state, actor, error.action || `${request.method} ${pathname}`, 'request', pathname, 'failed', {
+        message: error.message
+      });
+    });
+  } catch (auditError) {
+    console.error('No se pudo registrar auditoria fallida:', auditError.message);
+  }
+}

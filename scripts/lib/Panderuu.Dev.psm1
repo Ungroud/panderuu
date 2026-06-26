@@ -79,9 +79,9 @@ function Get-PanderuuAppState {
     RepoRoot = $root
     HasSrc = Test-Path (Join-Path $root 'src')
     HasTauri = Test-Path (Join-Path $root 'src-tauri')
-    HasMigrations = Test-Path (Join-Path $root 'src-tauri\migrations')
+    HasMigrations = Test-Path (Join-Path $root 'backend\sqlite-storage.mjs')
     HasBackend = Test-Path (Join-Path $root 'backend\server.mjs')
-    HasBackendStorage = Test-Path (Join-Path $root '.data\backend\panderuu.json')
+    HasBackendStorage = Test-Path (Join-Path $root '.data\backend\panderuu.db')
     HasNodeModules = Test-Path (Join-Path $root 'node_modules')
     HasPackageLock = Test-Path (Join-Path $root 'package-lock.json')
     HasDataDir = Test-Path (Join-Path $root '.data')

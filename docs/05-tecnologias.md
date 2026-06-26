@@ -1,5 +1,11 @@
 # Tecnologias
 
+## Estado actual
+
+El backend real actual ya usa SQLite local con migraciones internas y transacciones atomicas mediante `node:sqlite`. Esta capa permite construir y probar reglas financieras sin instalar dependencias externas.
+
+Tauri v2, Rust, React y TypeScript siguen siendo el destino del software de escritorio completo, pero no son requisito para validar las reglas base de caja, prestamos, pagos y auditoria.
+
 ## Stack recomendado
 
 | Capa | Tecnologia | Motivo |
@@ -7,9 +13,11 @@
 | Escritorio | Tauri v2 | Aplicacion ligera, instalable y local. |
 | Frontend | React + TypeScript | UI mantenible y tipada. |
 | Build frontend | Vite | Desarrollo rapido. |
-| Backend local | Rust | Reglas sensibles de caja, permisos y prestamos. |
+| Backend local v0 | Node.js + `node:sqlite` | Reglas reales sin dependencias externas durante construccion inicial. |
+| Backend escritorio final | Rust | Reglas sensibles de caja, permisos y prestamos dentro de Tauri. |
 | Base de datos | SQLite | Archivo local, offline y portable. |
-| Migraciones | SQL versionado con `sqlx` | Evolucion segura del esquema. |
+| Migraciones v0 | SQL versionado en backend Node | Evolucion segura del esquema actual. |
+| Migraciones final | SQL versionado con `sqlx` | Evolucion segura del esquema Tauri/Rust. |
 | Formularios | `react-hook-form` | Formularios ergonomicos. |
 | Validacion | `zod` | Validacion tipada. |
 | Tablas | `@tanstack/react-table` | Tablas densas y flexibles. |
@@ -70,6 +78,13 @@ SQLite:
 - Guarda datos.
 - Enforce constraints.
 - Permite reportes historicos.
+
+Backend Node actual:
+
+- Ejecuta reglas base.
+- Ejecuta migraciones SQLite.
+- Escribe operaciones financieras dentro de transacciones.
+- Prueba rollback antes de avanzar a UI conectada.
 
 ## Dinero
 
@@ -137,4 +152,3 @@ Tipos:
 - E2E para crear prestamo, registrar pago e imprimir boleta.
 - Prueba manual de impresora real.
 - Prueba de backup y restauracion.
-

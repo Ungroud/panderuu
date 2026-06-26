@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   BASE_RATE_PERCENT,
   INITIAL_LOAN_LIMIT_CENTS,
@@ -11,6 +13,7 @@ import {
   registerPayment
 } from './domain.mjs';
 import { seedState } from './storage.mjs';
+import { loadSqliteState, withSqliteStateTransaction } from './sqlite-storage.mjs';
 
 const state = seedState();
 const admin1 = state.actors.find((actor) => actor.adminLevel === 1);
@@ -85,5 +88,67 @@ assert.equal(close.differenceCents, 0);
 const summary = dashboard(state);
 assert.equal(summary.receiptCount, 1);
 assert.ok(state.auditEvents.length >= 5);
+
+const testDir = join('.data', 'test', `backend-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`);
+const sqlitePath = join(testDir, 'panderuu.db');
+mkdirSync(testDir, { recursive: true });
+
+try {
+  const sqliteSeed = loadSqliteState(sqlitePath);
+  assert.equal(cashBalanceCents(sqliteSeed), 180000);
+  assert.equal(sqliteSeed.people.length, 2);
+
+  const persistedPerson = withSqliteStateTransaction(sqlitePath, (txState) => {
+    const actor = txState.actors.find((item) => item.id === 'admin-caja');
+    return createPerson(txState, actor, {
+      type: 'natural',
+      name: 'Persona SQLite',
+      document: 'DNI 71000001',
+      phone: '999 123 456',
+      email: 'sqlite@example.local',
+      address: 'Direccion SQLite',
+      roles: ['Prestamista']
+    });
+  });
+
+  const stateAfterPerson = loadSqliteState(sqlitePath);
+  assert.ok(stateAfterPerson.people.some((item) => item.id === persistedPerson.id));
+
+  const balanceBeforeRollback = cashBalanceCents(stateAfterPerson);
+  assert.throws(
+    () =>
+      withSqliteStateTransaction(
+        sqlitePath,
+        (txState) => {
+          const actor = txState.actors.find((item) => item.id === 'admin-caja');
+          addCashIncome(txState, actor, { amountCents: 5000, reason: 'Debe revertirse' });
+        },
+        { failAfterWrite: true }
+      ),
+    /Simulated transaction failure/
+  );
+
+  const stateAfterRollback = loadSqliteState(sqlitePath);
+  assert.equal(cashBalanceCents(stateAfterRollback), balanceBeforeRollback);
+  assert.ok(!stateAfterRollback.cashMovements.some((item) => item.description === 'Debe revertirse'));
+
+  const persistedLoan = withSqliteStateTransaction(sqlitePath, (txState) => {
+    const actor = txState.actors.find((item) => item.id === 'admin-caja');
+    return createLoan(txState, actor, {
+      personId: persistedPerson.id,
+      capitalCents: 15000,
+      ratePercent: 5,
+      months: 1,
+      installments: 1
+    });
+  });
+  assert.equal(persistedLoan.totalCents, 15750);
+
+  const stateAfterLoan = loadSqliteState(sqlitePath);
+  assert.ok(stateAfterLoan.loans.some((item) => item.id === persistedLoan.id));
+  assert.equal(cashBalanceCents(stateAfterLoan), balanceBeforeRollback - 15000);
+} finally {
+  rmSync(testDir, { recursive: true, force: true });
+}
 
 console.log('[ok] backend domain tests passed');

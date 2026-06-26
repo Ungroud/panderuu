@@ -4,26 +4,26 @@
 
 Construir Panderuu desde lo basico: primero reglas de negocio reales en backend, luego almacenamiento definitivo, interfaz conectada, impresiones y escritorio.
 
-Esta version v0 usa Node.js sin dependencias externas y guarda datos en:
+Esta version usa Node.js sin dependencias externas y guarda datos en SQLite:
 
 ```text
-.data/backend/panderuu.json
+.data/backend/panderuu.db
 ```
 
-Esto permite probar reglas, permisos, caja, prestamos y pagos antes de instalar Rust, Tauri o SQLite.
+Esto permite probar reglas, permisos, caja, prestamos y pagos antes de instalar Rust o Tauri.
 
 ## Regla de implementacion actual
 
-Mientras no se apruebe instalar y configurar Tauri/Rust/SQLite, el backend real v0 se mantiene asi:
-
-```text
-El backend local debe ejecutarse con Node.js, usar solo librerias estandar y persistir en JSON local ignorado por git.
-```
-
-Cuando se apruebe la siguiente etapa, la regla propuesta sera:
+Regla aprobada para almacenamiento:
 
 ```text
 El almacenamiento definitivo se hara en SQLite con migraciones versionadas; toda escritura financiera debe ocurrir en una transaccion atomica que incluya la entidad principal, el movimiento de caja y la auditoria.
+```
+
+Implementacion actual:
+
+```text
+El backend usa node:sqlite, migraciones internas y transacciones BEGIN IMMEDIATE / COMMIT / ROLLBACK.
 ```
 
 ## Reglas codificadas
@@ -106,6 +106,7 @@ Comandos:
 ```text
 npm run backend:dev
 npm run backend:test
+npm run db:migrate
 ```
 
 Endpoints:
@@ -145,10 +146,10 @@ admin-seed
 
 ## Pendiente antes de avanzar
 
-Antes de pasar a base definitiva, se debe verificar o aprobar esta regla:
+Regla ya aprobada y aplicada:
 
 ```text
 Toda operacion financiera real debera escribirse en SQLite dentro de una transaccion atomica. Si una parte falla, no se guarda ningun cambio parcial.
 ```
 
-Tambien falta aprobar la instalacion/configuracion de Rust, Tauri y dependencias de SQLite cuando se quiera convertir esto en software de escritorio definitivo.
+Falta aprobar la instalacion/configuracion de Rust y Tauri cuando se quiera convertir esto en software de escritorio definitivo.

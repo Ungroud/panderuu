@@ -16,7 +16,36 @@ Features:
 - Modelo de datos inicial.
 - Diseno de dashboard y boletas.
 
-## v0.2 - Base tecnica
+## v0.2 - Dashboard web de validacion
+
+Objetivo:
+
+- Mostrar rapidamente la experiencia administrativa y validar el diseno base.
+
+Features:
+
+- Dashboard web local.
+- Navegacion lateral.
+- Tarjetas de caja, prestamos, pagos e intereses.
+- Vista tipo base de datos.
+- Capturas desktop y movil.
+
+## v0.3 - Backend real v0
+
+Objetivo:
+
+- Construir reglas de negocio desde backend real, con almacenamiento local y pruebas.
+
+Features:
+
+- Node.js local.
+- SQLite con migraciones internas.
+- Transacciones atomicas.
+- Administradores semilla nivel 1, 2 y 3.
+- Personas, prestamos, pagos, caja, boletas internas y auditoria.
+- Prueba de rollback para operaciones financieras.
+
+## v0.4 - Base tecnica de escritorio
 
 Objetivo:
 
@@ -32,7 +61,7 @@ Features:
 - Sidebar.
 - Tema visual.
 
-## v0.3 - Usuarios y permisos
+## v0.5 - Usuarios y permisos
 
 Objetivo:
 
@@ -47,7 +76,7 @@ Features:
 - Bloqueo `"permisos no autorizados"`.
 - Auditoria de accesos.
 
-## v0.4 - Personas
+## v0.6 - Personas
 
 Objetivo:
 
@@ -62,7 +91,7 @@ Features:
 - Perfil de administrador.
 - Foto opcional.
 
-## v0.5 - Prestamos
+## v0.7 - Prestamos
 
 Objetivo:
 
@@ -77,7 +106,7 @@ Features:
 - Cronograma de cuotas.
 - Desembolso desde caja.
 
-## v0.6 - Pagos y cuotas
+## v0.8 - Pagos y cuotas
 
 Objetivo:
 
@@ -92,7 +121,7 @@ Features:
 - Actualizacion de caja.
 - Boleta desde pago.
 
-## v0.7 - Caja y cierres
+## v0.9 - Caja y cierres
 
 Objetivo:
 
@@ -106,7 +135,7 @@ Features:
 - Informe imprimible.
 - Diferencias con observacion.
 
-## v0.8 - Reportes y boletas
+## v0.10 - Reportes y boletas
 
 Objetivo:
 
@@ -120,7 +149,7 @@ Features:
 - Reportes de prestamos, pagos, caja e intereses.
 - Grafico de intereses por mes.
 
-## v0.9 - Seguridad y respaldo
+## v0.11 - Seguridad y respaldo
 
 Objetivo:
 

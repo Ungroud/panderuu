@@ -15,9 +15,9 @@ if (-not (Test-PanderuuCommand 'node')) {
 }
 
 if ($StoragePath.Trim().Length -gt 0) {
-  $env:PANDERUU_DB_JSON = $StoragePath
+  $env:PANDERUU_DB_SQLITE = $StoragePath
 }
 
 $env:PANDERUU_BACKEND_PORT = [string]$Port
 Write-PanderuuStep "Backend real v0 en http://localhost:$Port"
-Invoke-PanderuuChecked -FilePath 'node' -Arguments @('backend/server.mjs') -WorkingDirectory $root
+Invoke-PanderuuChecked -FilePath 'node' -Arguments @('--no-warnings=ExperimentalWarning', 'backend/server.mjs') -WorkingDirectory $root
