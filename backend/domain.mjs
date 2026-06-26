@@ -1,6 +1,7 @@
 export const PERMISSION_ERROR = 'permisos no autorizados';
 export const INITIAL_LOAN_LIMIT_CENTS = 15000;
 export const BASE_RATE_PERCENT = 5;
+export const DAILY_MORA_RATE = 0.001;
 export const ALLOWED_RATES = new Set([2, 5, 10]);
 
 export function nowIso() {
@@ -48,6 +49,22 @@ export function loanBalanceCents(loan) {
 
 export function quotaBalanceCents(quota) {
   return Math.max(quota.totalCents - quota.paidCents, 0);
+}
+
+export function dailyMoraCents(loan) {
+  return Math.round(loan.capitalCents * DAILY_MORA_RATE);
+}
+
+export function loanMoraCents(state, loan) {
+  ensureStateCollections(state);
+  return state.quotas.filter((quota) => quota.loanId === loan.id).reduce((sum, quota) => sum + Number(quota.moraCents || 0), 0);
+}
+
+export function loanDueBalanceCents(state, loan) {
+  ensureStateCollections(state);
+  const quotas = state.quotas.filter((quota) => quota.loanId === loan.id);
+  if (quotas.length === 0) return loanBalanceCents(loan);
+  return quotas.reduce((sum, quota) => sum + quotaBalanceCents(quota), 0);
 }
 
 export function hasGoodHistory(person) {
@@ -180,16 +197,27 @@ export function registerPayment(state, actor, payload) {
   const loan = state.loans.find((item) => item.id === payload.loanId);
   if (!loan) throw validation('Prestamo no encontrado');
   if (loan.status === 'anulado') throw validation('No se puede pagar un prestamo anulado');
-  if (loanBalanceCents(loan) <= 0) throw validation('Prestamo ya pagado');
+  const paymentDate = normalizeDate(payload.paymentDate || nowIso());
+  refreshQuotaStatuses(state, paymentDate);
+  const dueBeforePayment = loanDueBalanceCents(state, loan);
+  if (dueBeforePayment <= 0) throw validation('Prestamo ya pagado');
 
-  const amountCents = Math.min(payload.amountCents, loanBalanceCents(loan));
+  const hadMoraBeforePayment = loanMoraCents(state, loan) > 0;
+  const amountCents = Math.min(payload.amountCents, dueBeforePayment);
   const applications = applyPaymentToQuotas(state, loan, amountCents);
   const installmentsClosed = applications.filter((application) => application.closedQuota).length;
   loan.paidCents += amountCents;
-  if (loan.paidCents >= loan.totalCents) {
+  if (loanDueBalanceCents(state, loan) <= 0) {
     loan.status = 'pagado';
     const person = state.people.find((item) => item.id === loan.personId);
-    if (person) person.punctualLoans += 1;
+    if (person) {
+      if (hadMoraBeforePayment) {
+        person.creditStatus = 'evaluado';
+      } else {
+        person.punctualLoans += 1;
+        if (person.punctualLoans > 2) person.creditStatus = 'buen_historial';
+      }
+    }
   }
 
   const payment = {
@@ -280,8 +308,9 @@ export function dashboard(state) {
   refreshQuotaStatuses(state);
   return {
     cashBalanceCents: cashBalanceCents(state),
-    activeLoanBalanceCents: state.loans.reduce((sum, loan) => sum + loanBalanceCents(loan), 0),
+    activeLoanBalanceCents: state.loans.reduce((sum, loan) => sum + loanDueBalanceCents(state, loan), 0),
     interestGeneratedCents: state.loans.reduce((sum, loan) => sum + loan.interestCents, 0),
+    moraGeneratedCents: state.loans.reduce((sum, loan) => sum + loanMoraCents(state, loan), 0),
     priorityPayments: state.quotas.filter((quota) => quota.status === 'vencida' || quota.status === 'prioritaria').length,
     quotaCount: state.quotas.length,
     peopleCount: state.people.length,
@@ -293,8 +322,26 @@ export function dashboard(state) {
 
 export function refreshQuotaStatuses(state, referenceDate = todayDate()) {
   ensureStateCollections(state);
+  const loansById = new Map(state.loans.map((loan) => [loan.id, loan]));
+  const peopleById = new Map(state.people.map((person) => [person.id, person]));
   for (const quota of state.quotas) {
     if (quota.status === 'anulada') continue;
+    const loan = loansById.get(quota.loanId);
+    const baseTotalCents = quota.capitalCents + quota.interestCents;
+    const overdueDays = loan && quota.status !== 'pagada' ? daysPastDue(quota.dueDate, referenceDate) : 0;
+
+    if (loan && quota.status !== 'pagada') {
+      quota.moraCents = dailyMoraCents(loan) * overdueDays;
+      quota.totalCents = baseTotalCents + quota.moraCents;
+      if (overdueDays > 0) {
+        const person = peopleById.get(loan.personId);
+        if (person) person.creditStatus = 'evaluado';
+        if (loan.status !== 'pagado' && loan.status !== 'anulado' && loan.status !== 'evaluado') {
+          loan.status = 'vencido';
+        }
+      }
+    }
+
     if (quota.paidCents >= quota.totalCents) {
       quota.status = 'pagada';
     } else if (quota.dueDate < referenceDate) {
@@ -311,6 +358,8 @@ export function refreshQuotaStatuses(state, referenceDate = todayDate()) {
 }
 
 function createReceipt(state, actor, loan, payment) {
+  const moraCents = loanMoraCents(state, loan);
+  const totalDueCents = loan.totalCents + moraCents;
   const receipt = {
     id: id('receipt'),
     number: `BOL-${new Date().getFullYear()}-${String(state.receipts.length + 1).padStart(4, '0')}`,
@@ -320,9 +369,10 @@ function createReceipt(state, actor, loan, payment) {
     capitalCents: loan.capitalCents,
     ratePercent: loan.ratePercent,
     interestCents: loan.interestCents,
-    totalCents: loan.totalCents,
+    moraCents,
+    totalCents: totalDueCents,
     paidCents: loan.paidCents,
-    balanceCents: loanBalanceCents(loan),
+    balanceCents: loanDueBalanceCents(state, loan),
     status: loan.status,
     installmentsClosed: payment.installmentsClosed,
     issuedBy: actor.id,
@@ -359,7 +409,6 @@ function createLoanQuotas(loan, installmentCount, loanDate) {
 }
 
 function applyPaymentToQuotas(state, loan, amountCents) {
-  refreshQuotaStatuses(state);
   let remaining = amountCents;
   const applications = [];
   const quotas = state.quotas
@@ -428,6 +477,13 @@ function addMonths(dateText, months) {
   const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
   date.setUTCDate(Math.min(day, lastDay));
   return date.toISOString().slice(0, 10);
+}
+
+function daysPastDue(dueDate, referenceDate) {
+  const due = Date.parse(`${dueDate}T00:00:00.000Z`);
+  const reference = Date.parse(`${normalizeDate(referenceDate)}T00:00:00.000Z`);
+  if (Number.isNaN(due) || Number.isNaN(reference) || reference <= due) return 0;
+  return Math.floor((reference - due) / 86400000);
 }
 
 function validation(message) {

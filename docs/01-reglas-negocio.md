@@ -142,6 +142,26 @@ Estados:
 - vencida.
 - anulada.
 
+### Mora
+
+Regla implementada:
+
+```text
+mora_diaria = capital_prestado * 0.1%
+dias_de_mora = dias completos de 24 horas despues del vencimiento
+mora_total = mora_diaria * dias_de_mora
+```
+
+Ejemplo:
+
+```text
+capital_prestado = S/ 1000
+mora_diaria = S/ 1
+si pasan 3 dias completos, mora_total = S/ 3
+```
+
+La mora se calcula sobre el capital total prestado, no sobre el saldo de la cuota. Cuando una cuota entra en mora, el prestamista queda marcado como `evaluado`.
+
 ## Pagos
 
 Reglas:
@@ -150,6 +170,7 @@ Reglas:
 - Puede cerrar una o mas cuotas.
 - Puede ser parcial.
 - Se aplica desde la cuota pendiente mas antigua del prestamo.
+- Puede cubrir capital, interes y mora acumulada.
 - Actualiza caja.
 - Genera movimiento de caja.
 - Puede generar boleta.

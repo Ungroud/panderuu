@@ -5,7 +5,7 @@ export const defaultPath = '.data/backend/panderuu.json';
 
 export function seedState() {
   return {
-    version: 2,
+    version: 3,
     actors: [
       { id: 'admin-seed', name: 'Admin Semilla', adminLevel: 3, seedAdmin: true },
       { id: 'admin-caja', name: 'Caja Nivel 2', adminLevel: 2 },

@@ -171,7 +171,7 @@ Campos actuales:
 | due_date | text | Fecha `YYYY-MM-DD`. |
 | capital_cents | integer | Capital asignado. |
 | interest_cents | integer | Interes asignado. |
-| mora_cents | integer | Mora, por ahora cero. |
+| mora_cents | integer | Mora acumulada segun dias completos de atraso. |
 | total_cents | integer | Total de cuota. |
 | paid_cents | integer | Pagado acumulado. |
 | status | text | Estado de cuota. |
@@ -197,6 +197,12 @@ payment_applications
 ```
 
 Cada registro indica pago, prestamo, cuota, monto aplicado y si esa cuota quedo cerrada.
+
+La mora se refleja en:
+
+- `loan_installments.mora_cents`.
+- `loan_installments.total_cents`, que incluye capital, interes y mora actual cuando aplica.
+- `receipts.mora_cents`, para dejar evidencia en la boleta interna.
 
 ## Movimientos de caja
 

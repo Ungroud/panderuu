@@ -3,14 +3,18 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   BASE_RATE_PERCENT,
+  DAILY_MORA_RATE,
   INITIAL_LOAN_LIMIT_CENTS,
   addCashIncome,
   cashBalanceCents,
   closeCash,
   createLoan,
   createPerson,
+  dailyMoraCents,
   dashboard,
+  loanDueBalanceCents,
   quotaBalanceCents,
+  refreshQuotaStatuses,
   registerPayment
 } from './domain.mjs';
 import { seedState } from './storage.mjs';
@@ -21,6 +25,7 @@ const admin1 = state.actors.find((actor) => actor.adminLevel === 1);
 const admin2 = state.actors.find((actor) => actor.adminLevel === 2);
 
 assert.equal(BASE_RATE_PERCENT, 5);
+assert.equal(DAILY_MORA_RATE, 0.001);
 assert.equal(INITIAL_LOAN_LIMIT_CENTS, 15000);
 assert.equal(cashBalanceCents(state), 180000);
 
@@ -90,13 +95,13 @@ const multiLoan = createLoan(state, admin2, {
   ratePercent: 5,
   months: 3,
   installments: 3,
-  loanDate: '2026-01-15'
+  loanDate: '2026-07-15'
 });
 const multiQuotas = state.quotas.filter((quota) => quota.loanId === multiLoan.id).sort((left, right) => left.number - right.number);
 assert.equal(multiQuotas.length, 3);
 assert.deepEqual(
   multiQuotas.map((quota) => quota.dueDate),
-  ['2026-02-15', '2026-03-15', '2026-04-15']
+  ['2026-08-15', '2026-09-15', '2026-10-15']
 );
 assert.equal(multiQuotas.reduce((sum, quota) => sum + quota.totalCents, 0), multiLoan.totalCents);
 assert.equal(multiQuotas[0].totalCents, 5250);
@@ -104,7 +109,8 @@ assert.equal(cashBalanceCents(state), 165750);
 
 const multiPayment = registerPayment(state, admin2, {
   loanId: multiLoan.id,
-  amountCents: 10500
+  amountCents: 10500,
+  paymentDate: '2026-08-15'
 });
 assert.equal(multiPayment.payment.installmentsClosed, 2);
 assert.equal(multiPayment.applications.length, 2);
@@ -113,6 +119,38 @@ assert.equal(quotaBalanceCents(multiQuotas[0]), 0);
 assert.equal(quotaBalanceCents(multiQuotas[1]), 0);
 assert.equal(quotaBalanceCents(multiQuotas[2]), 5250);
 assert.equal(cashBalanceCents(state), 176250);
+
+const moraState = seedState();
+const moraAdmin = moraState.actors.find((actor) => actor.id === 'admin-caja');
+const moraBorrower = moraState.people.find((item) => item.id === 'person-demo-company');
+const moraLoan = createLoan(moraState, moraAdmin, {
+  personId: moraBorrower.id,
+  capitalCents: 100000,
+  ratePercent: 5,
+  months: 1,
+  installments: 1,
+  loanDate: '2026-01-01'
+});
+const moraQuota = moraState.quotas.find((quota) => quota.loanId === moraLoan.id);
+assert.equal(dailyMoraCents(moraLoan), 100);
+refreshQuotaStatuses(moraState, '2026-02-04');
+assert.equal(moraQuota.moraCents, 300);
+assert.equal(moraQuota.totalCents, 105300);
+assert.equal(moraQuota.status, 'vencida');
+assert.equal(moraBorrower.creditStatus, 'evaluado');
+assert.equal(loanDueBalanceCents(moraState, moraLoan), 105300);
+
+const moraPayment = registerPayment(moraState, moraAdmin, {
+  loanId: moraLoan.id,
+  amountCents: 105300,
+  paymentDate: '2026-02-04'
+});
+assert.equal(moraPayment.payment.amountCents, 105300);
+assert.equal(moraPayment.receipt.moraCents, 300);
+assert.equal(moraPayment.receipt.balanceCents, 0);
+assert.equal(moraPayment.loan.status, 'pagado');
+assert.equal(moraBorrower.creditStatus, 'evaluado');
+assert.equal(cashBalanceCents(moraState), 185300);
 
 const income = addCashIncome(state, admin2, { amountCents: 10000, reason: 'Ingreso demo test' });
 assert.equal(income.direction, 'entrada');

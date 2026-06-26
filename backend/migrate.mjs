@@ -35,7 +35,8 @@ try {
           paymentApplications: state.paymentApplications.length,
           cashMovements: state.cashMovements.length,
           auditEvents: state.auditEvents.length
-        }
+        },
+        moraGeneratedCents: state.quotas.reduce((sum, quota) => sum + Number(quota.moraCents || 0), 0)
       },
       null,
       2

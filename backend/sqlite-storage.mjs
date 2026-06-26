@@ -144,6 +144,13 @@ export const migrations = [
         created_at TEXT NOT NULL
       );
     `
+  },
+  {
+    version: 3,
+    name: '003_receipt_mora',
+    sql: `
+      ALTER TABLE receipts ADD COLUMN mora_cents INTEGER NOT NULL DEFAULT 0;
+    `
   }
 ];
 
@@ -259,7 +266,7 @@ export function migrationSummary(db) {
 
 export function readStateFromDb(db) {
   return {
-    version: 2,
+    version: 3,
     actors: db
       .prepare('SELECT id, name, admin_level AS adminLevel, seed_admin AS seedAdmin FROM actors ORDER BY rowid')
       .all()
@@ -347,7 +354,7 @@ export function readStateFromDb(db) {
       .prepare(
         `SELECT id, number, loan_id AS loanId, payment_id AS paymentId, person_name AS personName,
           capital_cents AS capitalCents, rate_percent AS ratePercent, interest_cents AS interestCents,
-          total_cents AS totalCents, paid_cents AS paidCents, balance_cents AS balanceCents,
+          mora_cents AS moraCents, total_cents AS totalCents, paid_cents AS paidCents, balance_cents AS balanceCents,
           status, issued_by AS issuedBy, issued_at AS issuedAt
         FROM receipts ORDER BY issued_at DESC, rowid DESC`
       )
@@ -540,8 +547,8 @@ export function writeStateToDb(db, state) {
   const insertReceipt = db.prepare(`
     INSERT INTO receipts (
       id, number, loan_id, payment_id, person_name, capital_cents, rate_percent, interest_cents,
-      total_cents, paid_cents, balance_cents, status, issued_by, issued_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      mora_cents, total_cents, paid_cents, balance_cents, status, issued_by, issued_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const receipt of state.receipts) {
     insertReceipt.run(
@@ -553,6 +560,7 @@ export function writeStateToDb(db, state) {
       Number(receipt.capitalCents),
       Number(receipt.ratePercent),
       Number(receipt.interestCents),
+      Number(receipt.moraCents || 0),
       Number(receipt.totalCents),
       Number(receipt.paidCents),
       Number(receipt.balanceCents),
@@ -696,6 +704,7 @@ function toReceipt(receipt) {
     capitalCents: Number(receipt.capitalCents),
     ratePercent: Number(receipt.ratePercent),
     interestCents: Number(receipt.interestCents),
+    moraCents: Number(receipt.moraCents),
     totalCents: Number(receipt.totalCents),
     paidCents: Number(receipt.paidCents),
     balanceCents: Number(receipt.balanceCents),

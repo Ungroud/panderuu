@@ -97,6 +97,16 @@ Un pago puede cerrar una o varias cuotas.
 Los estados de cuota se refrescan segun fecha actual: pendiente, prioritaria, parcial, pagada, vencida o anulada.
 ```
 
+Mora:
+
+```text
+La mora diaria es 0.1% del capital prestado.
+S/ 1000 de capital generan S/ 1 de mora por dia completo atrasado.
+La mora se cuenta por dias completos de 24 horas despues del vencimiento.
+Cuando una cuota tiene mora, el prestamista queda como evaluado.
+Los pagos pueden cubrir capital, interes y mora acumulada.
+```
+
 Auditoria:
 
 ```text
