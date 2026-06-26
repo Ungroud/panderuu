@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
 const requiredFiles = ['src/index.html', 'src/app.js', 'src/styles.css'];
 const requiredText = [
@@ -38,5 +39,10 @@ if (/Joseline|Jordan|Roger|Paolo|Daniela|Gianela|Andrea/.test(combined)) {
   process.exit(1);
 }
 
-console.log('[ok] Static app verified');
+const syntax = spawnSync(process.execPath, ['--check', 'src/app.js'], { encoding: 'utf8' });
+if (syntax.status !== 0) {
+  console.error(syntax.stderr || syntax.stdout);
+  process.exit(syntax.status || 1);
+}
 
+console.log('[ok] Static app verified');

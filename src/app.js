@@ -6,7 +6,7 @@ const admins = [
   { name: 'Informes Nivel 1', level: 1 }
 ];
 
-const people = [
+let people = [
   {
     id: 'p-001',
     type: 'natural',
@@ -65,7 +65,7 @@ const people = [
   }
 ];
 
-const loans = [
+let loans = [
   {
     id: 'L-0001',
     lenderId: 'p-001',
@@ -113,13 +113,13 @@ const loans = [
   }
 ];
 
-const payments = [
+let payments = [
   { id: 'pay-1', person: 'Cliente En Evaluacion', loanId: 'L-0003', amount: 82.5, due: '2026-06-20', status: 'vencida', installments: 1 },
   { id: 'pay-2', person: 'Cliente Demo Nuevo', loanId: 'L-0001', amount: 157.5, due: today, status: 'prioritaria', installments: 1 },
   { id: 'pay-3', person: 'Empresa Demo Asociada', loanId: 'L-0002', amount: 210, due: '2026-06-28', status: 'pendiente', installments: 1 }
 ];
 
-const cashMovements = [
+let cashMovements = [
   { id: 'cash-1', date: today, type: 'ingreso', description: 'Ingreso inicial justificado de caja', amount: 1800, direction: 'entrada' },
   { id: 'cash-2', date: today, type: 'prestamo', description: 'Desembolso L-0001', amount: 150, direction: 'salida' },
   { id: 'cash-3', date: '2026-06-25', type: 'pago', description: 'Pago parcial L-0002', amount: 210, direction: 'entrada' },
@@ -135,6 +135,7 @@ const interestByMonth = [
 
 const state = {
   adminLevel: 3,
+  activeView: 'dashboard',
   selectedPersonId: 'p-001',
   panel: null,
   receipt: {
@@ -153,6 +154,55 @@ const state = {
     admin: 'Caja Nivel 2'
   }
 };
+
+let receipts = [state.receipt];
+let cashClosures = [];
+
+function saveApp() {
+  try {
+    localStorage.setItem(
+      'panderuu-demo-state',
+      JSON.stringify({
+        people,
+        loans,
+        payments,
+        cashMovements,
+        receipts,
+        cashClosures,
+        state: {
+          adminLevel: state.adminLevel,
+          activeView: state.activeView,
+          selectedPersonId: state.selectedPersonId,
+          receipt: state.receipt
+        }
+      })
+    );
+  } catch (error) {
+    console.warn('No se pudo guardar estado local', error);
+  }
+}
+
+function loadApp() {
+  try {
+    const raw = localStorage.getItem('panderuu-demo-state');
+    if (!raw) return;
+    const stored = JSON.parse(raw);
+    people = stored.people || people;
+    loans = stored.loans || loans;
+    payments = stored.payments || payments;
+    cashMovements = stored.cashMovements || cashMovements;
+    receipts = stored.receipts || receipts;
+    cashClosures = stored.cashClosures || cashClosures;
+    Object.assign(state, stored.state || {});
+  } catch (error) {
+    console.warn('No se pudo cargar estado local', error);
+  }
+}
+
+function resetDemo() {
+  localStorage.removeItem('panderuu-demo-state');
+  location.reload();
+}
 
 const icons = {
   dashboard: '<svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10Zm10 8h8V3h-8v18ZM3 21h8v-6H3v6Z"/></svg>',
@@ -205,11 +255,26 @@ function totals() {
   return { cash, active, interest, priority };
 }
 
+function viewTitle() {
+  const titles = {
+    dashboard: ['Dashboard', 'Control general de caja y prestamos'],
+    prestamistas: ['Prestamistas', 'Registro, perfil e historial crediticio'],
+    asociados: ['Asociados', 'Personas naturales y empresas registradas'],
+    prestamos: ['Prestamos', 'Cartera, saldos, intereses y estados'],
+    pagos: ['Pagos', 'Cuotas prioritarias y pagos registrados'],
+    caja: ['Caja', 'Movimientos, ingresos y cierre de caja'],
+    boletas: ['Boletas', 'Vista previa, correlativos e impresiones'],
+    reportes: ['Reportes', 'Indicadores de intereses, pagos y caja']
+  };
+  return titles[state.activeView] || titles.dashboard;
+}
+
 function render() {
   const t = totals();
   const selectedPerson = people.find((person) => person.id === state.selectedPersonId) || people[0];
   const selectedLoans = loans.filter((loan) => loan.lenderId === selectedPerson.id);
   const app = document.querySelector('#app');
+  const [section, title] = viewTitle();
 
   app.innerHTML = `
     <div class="app-shell">
@@ -219,22 +284,22 @@ function render() {
           <div><strong>Panderuu</strong><span>Gestion local</span></div>
         </div>
         <nav>
-          ${navButton('Dashboard', 'dashboard', true)}
-          ${navButton('Prestamistas', 'users')}
-          ${navButton('Asociados', 'users')}
-          ${navButton('Prestamos', 'loan')}
-          ${navButton('Pagos', 'receipt')}
-          ${navButton('Caja', 'wallet')}
-          ${navButton('Boletas', 'printer')}
-          ${navButton('Reportes', 'chart')}
+          ${navButton('Dashboard', 'dashboard', 'dashboard')}
+          ${navButton('Prestamistas', 'users', 'prestamistas')}
+          ${navButton('Asociados', 'users', 'asociados')}
+          ${navButton('Prestamos', 'loan', 'prestamos')}
+          ${navButton('Pagos', 'receipt', 'pagos')}
+          ${navButton('Caja', 'wallet', 'caja')}
+          ${navButton('Boletas', 'printer', 'boletas')}
+          ${navButton('Reportes', 'chart', 'reportes')}
         </nav>
       </aside>
 
       <main class="workspace">
         <header class="topbar">
           <div>
-            <p class="eyebrow">Dashboard</p>
-            <h1>Control general de caja y prestamos</h1>
+            <p class="eyebrow">${section}</p>
+            <h1>${title}</h1>
           </div>
           <div class="topbar-actions">
             <label class="search-box">${icons.dashboard}<input placeholder="Buscar persona, prestamo o boleta"></label>
@@ -243,6 +308,7 @@ function render() {
                 ${admins.map((admin) => `<option value="${admin.level}" ${admin.level === state.adminLevel ? 'selected' : ''}>Admin nivel ${admin.level}</option>`).join('')}
               </select>
             </label>
+            <button class="small-button" id="resetDemo" type="button">Reiniciar demo</button>
           </div>
         </header>
 
@@ -258,33 +324,12 @@ function render() {
           ${actionButton('Agregar asociado', 'users', 'asociado')}
           ${actionButton('Crear prestamo', 'loan', 'prestamo')}
           ${actionButton('Registrar pago', 'receipt', 'pago')}
+          ${actionButton('Ingresar caja', 'wallet', 'ingresoCaja')}
+          ${actionButton('Cerrar caja', 'chart', 'cierreCaja')}
           ${actionButton('Informe impreso', 'printer', 'boleta')}
         </section>
 
-        <section class="dashboard-grid">
-          <div class="panel large-panel">
-            <div class="panel-header"><div><p class="eyebrow">Prioridad</p><h2>Pagos de hoy, vencidos y evaluados</h2></div>${icons.alert}</div>
-            ${priorityTable()}
-          </div>
-          <div class="panel">
-            <div class="panel-header"><div><p class="eyebrow">Intereses</p><h2>Ganancia mensual</h2></div>${icons.chart}</div>
-            ${barChart()}
-          </div>
-        </section>
-
-        <section class="lower-grid">
-          <div class="panel">
-            <div class="panel-header"><div><p class="eyebrow">Personas</p><h2>Prestamistas y asociados</h2></div>${icons.users}</div>
-            ${peopleList()}
-          </div>
-          <div class="panel profile-panel">
-            ${profile(selectedPerson, selectedLoans)}
-          </div>
-          <div class="panel">
-            <div class="panel-header"><div><p class="eyebrow">Caja</p><h2>Ultimos movimientos</h2></div>${icons.wallet}</div>
-            ${cashList()}
-          </div>
-        </section>
+        ${renderActiveView(selectedPerson, selectedLoans)}
       </main>
     </div>
     ${state.panel ? drawer(state.panel) : ''}
@@ -293,8 +338,8 @@ function render() {
   bindEvents();
 }
 
-function navButton(label, icon, active = false) {
-  return `<button class="nav-item ${active ? 'active' : ''}" type="button">${icons[icon]}<span>${label}</span></button>`;
+function navButton(label, icon, view) {
+  return `<button class="nav-item ${state.activeView === view ? 'active' : ''}" type="button" data-view="${view}">${icons[icon]}<span>${label}</span></button>`;
 }
 
 function metric(label, value, meta, icon, tone) {
@@ -303,6 +348,143 @@ function metric(label, value, meta, icon, tone) {
 
 function actionButton(label, icon, action) {
   return `<button class="action-button" type="button" data-action="${action}">${icons[icon]}<span>${label}</span></button>`;
+}
+
+function renderActiveView(selectedPerson, selectedLoans) {
+  if (state.activeView === 'prestamistas') return peopleSection('Prestamistas', (person) => person.roles.includes('Prestamista'));
+  if (state.activeView === 'asociados') return peopleSection('Asociados', (person) => person.roles.includes('Asociado'));
+  if (state.activeView === 'prestamos') return loansSection();
+  if (state.activeView === 'pagos') return paymentsSection();
+  if (state.activeView === 'caja') return cashSection();
+  if (state.activeView === 'boletas') return receiptsSection();
+  if (state.activeView === 'reportes') return reportsSection();
+  return dashboardSection(selectedPerson, selectedLoans);
+}
+
+function dashboardSection(selectedPerson, selectedLoans) {
+  return `
+    <section class="dashboard-grid">
+      <div class="panel large-panel">
+        <div class="panel-header"><div><p class="eyebrow">Prioridad</p><h2>Pagos de hoy, vencidos y evaluados</h2></div>${icons.alert}</div>
+        ${priorityTable()}
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div><p class="eyebrow">Intereses</p><h2>Ganancia mensual</h2></div>${icons.chart}</div>
+        ${barChart()}
+      </div>
+    </section>
+    <section class="lower-grid">
+      <div class="panel">
+        <div class="panel-header"><div><p class="eyebrow">Personas</p><h2>Prestamistas y asociados</h2></div>${icons.users}</div>
+        ${peopleList()}
+      </div>
+      <div class="panel profile-panel">
+        ${profile(selectedPerson, selectedLoans)}
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div><p class="eyebrow">Caja</p><h2>Ultimos movimientos</h2></div>${icons.wallet}</div>
+        ${cashList()}
+      </div>
+    </section>`;
+}
+
+function peopleSection(title, predicate) {
+  const filtered = people.filter(predicate);
+  return `<section class="single-grid">
+    <div class="panel">
+      <div class="panel-header"><div><p class="eyebrow">${title}</p><h2>${filtered.length} registros activos</h2></div>${icons.users}</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Nombre</th><th>Documento</th><th>Celular</th><th>Roles</th><th>Estado</th><th>Registrado por</th></tr></thead>
+        <tbody>${filtered
+          .map(
+            (person) => `<tr data-person="${person.id}"><td>${person.name}</td><td>${person.document}</td><td>${person.phone}</td><td>${person.roles.join(' / ')}</td><td>${badge(person.credit)}</td><td>${person.registeredBy}</td></tr>`
+          )
+          .join('')}</tbody>
+      </table></div>
+    </div>
+  </section>`;
+}
+
+function loansSection() {
+  return `<section class="single-grid">
+    <div class="panel">
+      <div class="panel-header"><div><p class="eyebrow">Cartera</p><h2>Prestamos y saldos</h2></div>${icons.loan}</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>ID</th><th>Prestamista</th><th>Capital</th><th>Interes</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Proximo</th><th>Estado</th></tr></thead>
+        <tbody>${loans
+          .map(
+            (loan) => `<tr><td>${loan.id}</td><td>${loan.person}</td><td>${money(loan.capital)}</td><td>${loan.rate}% / ${money(loan.interest)}</td><td>${money(loan.total)}</td><td>${money(loan.paid)}</td><td>${money(loanBalance(loan))}</td><td>${loan.nextDue}</td><td>${badge(loan.status)}</td></tr>`
+          )
+          .join('')}</tbody>
+      </table></div>
+    </div>
+  </section>`;
+}
+
+function paymentsSection() {
+  return `<section class="single-grid">
+    <div class="panel">
+      <div class="panel-header"><div><p class="eyebrow">Cuotas</p><h2>Pagos pendientes y registrados</h2></div>${icons.receipt}</div>
+      ${priorityTable()}
+    </div>
+  </section>`;
+}
+
+function cashSection() {
+  return `<section class="dashboard-grid">
+    <div class="panel large-panel">
+      <div class="panel-header"><div><p class="eyebrow">Caja unica</p><h2>Libro de movimientos</h2></div>${icons.wallet}</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Descripcion</th><th>Direccion</th><th>Monto</th></tr></thead>
+        <tbody>${cashMovements
+          .map(
+            (movement) => `<tr><td>${movement.date}</td><td>${movement.type}</td><td>${movement.description}</td><td>${movement.direction}</td><td class="${movement.direction === 'entrada' ? 'money-in' : 'money-out'}">${money(movement.amount)}</td></tr>`
+          )
+          .join('')}</tbody>
+      </table></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><div><p class="eyebrow">Cierres</p><h2>Conteos finales</h2></div>${icons.chart}</div>
+      ${cashClosures.length === 0 ? '<p class="empty">Sin cierres registrados.</p>' : cashClosures.map((item) => `<div class="loan-item"><div><strong>${item.range}</strong><small>Esperado ${money(item.expected)} / contado ${money(item.counted)}</small></div>${badge(item.difference === 0 ? 'pagado' : 'evaluado')}</div>`).join('')}
+    </div>
+  </section>`;
+}
+
+function receiptsSection() {
+  return `<section class="single-grid">
+    <div class="panel">
+      <div class="panel-header"><div><p class="eyebrow">Boletas</p><h2>${receipts.length} comprobantes generados</h2></div>${icons.printer}</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Numero</th><th>Persona</th><th>Fecha</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Estado</th><th>Accion</th></tr></thead>
+        <tbody>${receipts
+          .map(
+            (receipt, index) => `<tr><td>${receipt.number}</td><td>${receipt.person}</td><td>${receipt.date}</td><td>${money(receipt.total)}</td><td>${money(receipt.paid)}</td><td>${money(receipt.balance)}</td><td>${receipt.status}</td><td><button class="small-button" data-receipt="${index}" type="button">Ver</button></td></tr>`
+          )
+          .join('')}</tbody>
+      </table></div>
+    </div>
+  </section>`;
+}
+
+function reportsSection() {
+  const t = totals();
+  return `<section class="dashboard-grid">
+    <div class="panel">
+      <div class="panel-header"><div><p class="eyebrow">Resumen</p><h2>Informe operativo</h2></div>${icons.chart}</div>
+      <div class="report-grid">
+        <span><strong>${money(t.cash)}</strong>Caja actual</span>
+        <span><strong>${money(t.active)}</strong>Saldo prestado</span>
+        <span><strong>${money(t.interest)}</strong>Interes generado</span>
+        <span><strong>${payments.length}</strong>Cuotas registradas</span>
+        <span><strong>${people.filter((p) => p.roles.includes('Prestamista')).length}</strong>Prestamistas</span>
+        <span><strong>${people.filter((p) => p.roles.includes('Asociado')).length}</strong>Asociados</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><div><p class="eyebrow">Intereses</p><h2>Grafico mensual</h2></div>${icons.chart}</div>
+      ${barChart()}
+    </div>
+  </section>`;
 }
 
 function priorityTable() {
@@ -392,8 +574,24 @@ function badge(status) {
 }
 
 function drawer(panel) {
-  const title = { prestamista: 'Agregar prestamista', asociado: 'Agregar asociado', prestamo: 'Crear prestamo', pago: 'Registrar pago', boleta: 'Vista previa de boleta' }[panel];
-  const body = { prestamista: personForm('prestamista'), asociado: personForm('asociado'), prestamo: loanForm(), pago: paymentForm(), boleta: receiptPreview() }[panel];
+  const title = {
+    prestamista: 'Agregar prestamista',
+    asociado: 'Agregar asociado',
+    prestamo: 'Crear prestamo',
+    pago: 'Registrar pago',
+    ingresoCaja: 'Ingresar dinero a caja',
+    cierreCaja: 'Cerrar caja',
+    boleta: 'Vista previa de boleta'
+  }[panel];
+  const body = {
+    prestamista: personForm('prestamista'),
+    asociado: personForm('asociado'),
+    prestamo: loanForm(),
+    pago: paymentForm(),
+    ingresoCaja: cashIncomeForm(),
+    cierreCaja: cashCloseForm(),
+    boleta: receiptPreview()
+  }[panel];
   return `<div class="drawer-backdrop"><aside class="drawer"><div class="drawer-header"><h2>${title}</h2><button class="icon-button" id="closeDrawer" type="button">x</button></div>${body}</aside></div>`;
 }
 
@@ -434,6 +632,27 @@ function paymentForm() {
   </form>`;
 }
 
+function cashIncomeForm() {
+  return `<form class="form-stack" id="cashIncomeForm">
+    <label>Monto<input name="amount" type="number" value="100" min="1"></label>
+    <label>Justificacion<input name="reason" placeholder="Motivo obligatorio"></label>
+    <p class="form-error" hidden></p>
+    <button class="primary-button" type="submit">${icons.wallet} Ingresar a caja</button>
+  </form>`;
+}
+
+function cashCloseForm() {
+  const expected = totals().cash;
+  return `<form class="form-stack" id="cashCloseForm">
+    <div class="calc-box"><span>Saldo esperado: ${money(expected)}</span><span>Prestamos: ${loans.length}</span><span>Intereses del mes: ${money(totals().interest)}</span></div>
+    <label>Rango<select name="range"><option>Dia actual</option><option>Semana actual</option><option>Mes actual</option><option>Rango seleccionado</option></select></label>
+    <label>Saldo contado<input name="counted" type="number" value="${expected}" min="0"></label>
+    <label>Observacion<input name="reason" placeholder="Obligatorio si existe diferencia"></label>
+    <p class="form-error" hidden></p>
+    <button class="primary-button" type="submit">${icons.chart} Generar cierre</button>
+  </form>`;
+}
+
 function receiptPreview() {
   const receipt = state.receipt;
   return `<div class="receipt-area">
@@ -452,13 +671,25 @@ function receiptPreview() {
 function bindEvents() {
   document.querySelector('#adminLevel')?.addEventListener('change', (event) => {
     state.adminLevel = Number(event.target.value);
+    saveApp();
     render();
+  });
+
+  document.querySelector('#resetDemo')?.addEventListener('click', resetDemo);
+
+  document.querySelectorAll('[data-view]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.activeView = button.getAttribute('data-view');
+      saveApp();
+      render();
+    });
   });
 
   document.querySelectorAll('[data-action]').forEach((button) => {
     button.addEventListener('click', () => {
       const action = button.getAttribute('data-action');
-      const permission = action === 'boleta' ? 'report' : action === 'prestamista' || action === 'asociado' ? 'people' : 'loan';
+      const permission =
+        action === 'boleta' ? 'report' : action === 'prestamista' || action === 'asociado' ? 'people' : action === 'ingresoCaja' || action === 'cierreCaja' ? 'cash' : 'loan';
       requirePermission(permission, action);
     });
   });
@@ -466,12 +697,23 @@ function bindEvents() {
   document.querySelectorAll('[data-person]').forEach((button) => {
     button.addEventListener('click', () => {
       state.selectedPersonId = button.getAttribute('data-person');
+      saveApp();
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-receipt]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.receipt = receipts[Number(button.getAttribute('data-receipt'))] || state.receipt;
+      state.panel = 'boleta';
+      saveApp();
       render();
     });
   });
 
   document.querySelector('#closeDrawer')?.addEventListener('click', () => {
     state.panel = null;
+    saveApp();
     render();
   });
 
@@ -480,6 +722,8 @@ function bindEvents() {
   document.querySelector('#loanForm')?.addEventListener('input', updateLoanCalc);
   document.querySelector('#loanForm')?.addEventListener('submit', submitLoan);
   document.querySelector('#paymentForm')?.addEventListener('submit', submitPayment);
+  document.querySelector('#cashIncomeForm')?.addEventListener('submit', submitCashIncome);
+  document.querySelector('#cashCloseForm')?.addEventListener('submit', submitCashClose);
 }
 
 function submitPerson(event) {
@@ -509,6 +753,7 @@ function submitPerson(event) {
   people.unshift(person);
   state.selectedPersonId = person.id;
   state.panel = null;
+  saveApp();
   render();
 }
 
@@ -542,7 +787,9 @@ function submitLoan(event) {
   payments.unshift({ id: `pay-${Date.now()}`, person: lender.name, loanId: id, amount: total / installments, due: today, status: 'prioritaria', installments });
   cashMovements.unshift({ id: `cash-${Date.now()}`, date: today, type: 'prestamo', description: `Desembolso ${id}`, amount: capital, direction: 'salida' });
   state.receipt = { number: `BOL-2026-${String(loans.length + 1).padStart(4, '0')}`, person: lender.name, document: lender.document, loanAmount: capital, rate, interest, period: months, date: today, total, paid: 0, balance: total, status: 'Pendiente', admin: admins.find((admin) => admin.level === state.adminLevel).name };
+  receipts.unshift(state.receipt);
   state.panel = null;
+  saveApp();
   render();
 }
 
@@ -559,7 +806,39 @@ function submitPayment(event) {
   loan.status = loan.paid >= loan.total ? 'pagado' : loan.status;
   cashMovements.unshift({ id: `cash-${Date.now()}`, date: today, type: 'pago', description: `Pago ${loan.id}`, amount, direction: 'entrada' });
   state.receipt = { number: `BOL-2026-${String(Date.now()).slice(-4)}`, person: loan.person, document: people.find((person) => person.id === loan.lenderId)?.document || 'Sin documento', loanAmount: loan.capital, rate: loan.rate, interest: loan.interest, period: loan.months, date: today, total: loan.total, paid: loan.paid, balance: loanBalance(loan), status: loan.status === 'pagado' ? 'Pagado' : 'Parcial', admin: admins.find((admin) => admin.level === state.adminLevel).name };
+  receipts.unshift(state.receipt);
   state.panel = 'boleta';
+  saveApp();
+  render();
+}
+
+function submitCashIncome(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const amount = Number(data.amount);
+  const error = form.querySelector('.form-error');
+  if (amount <= 0 || !String(data.reason || '').trim()) return showError(error, 'Monto positivo y justificacion son obligatorios.');
+  cashMovements.unshift({ id: `cash-${Date.now()}`, date: today, type: 'ingreso', description: data.reason, amount, direction: 'entrada' });
+  state.panel = null;
+  state.activeView = 'caja';
+  saveApp();
+  render();
+}
+
+function submitCashClose(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const expected = totals().cash;
+  const counted = Number(data.counted);
+  const difference = Number((counted - expected).toFixed(2));
+  const error = form.querySelector('.form-error');
+  if (difference !== 0 && !String(data.reason || '').trim()) return showError(error, 'La diferencia requiere observacion obligatoria.');
+  cashClosures.unshift({ id: `close-${Date.now()}`, date: today, range: data.range, expected, counted, difference, reason: data.reason || 'Sin diferencia' });
+  state.panel = null;
+  state.activeView = 'caja';
+  saveApp();
   render();
 }
 
@@ -568,5 +847,5 @@ function showError(error, message) {
   error.textContent = message;
 }
 
+loadApp();
 render();
-
