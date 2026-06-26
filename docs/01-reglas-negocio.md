@@ -95,6 +95,16 @@ Reglas:
 - Puede acumular rol Prestamista si recibira prestamos.
 - El asociado mantiene historial de registros, prestamos, pagos, boletas y observaciones.
 
+Regla implementada en backend v0:
+
+```text
+Persona natural: DNI de 8 digitos.
+Empresa: RUC de 11 digitos.
+Celular: 9 digitos.
+Correo: opcional, pero si existe debe tener formato valido.
+Roles permitidos: Administrador, Prestamista, Asociado.
+```
+
 ## Prestamos
 
 ### Regla inicial
@@ -251,9 +261,9 @@ Debe mostrar:
 
 - Nombres sin numeros.
 - Correos con formato valido.
-- DNI con formato y longitud configurada.
-- RUC con formato y longitud configurada.
-- Celular normalizado.
+- DNI de 8 digitos para persona natural.
+- RUC de 11 digitos para empresa.
+- Celular normalizado a 9 digitos.
 - Direccion requerida para operaciones de prestamo.
 - Montos positivos.
 - Tasas no negativas.

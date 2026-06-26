@@ -15,6 +15,9 @@ import {
   dailyMoraCents,
   dashboard,
   loanDueBalanceCents,
+  people,
+  peopleByRole,
+  personProfile,
   quotaBalanceCents,
   refreshQuotaStatuses,
   registerPayment
@@ -54,6 +57,74 @@ const person = createPerson(state, admin2, {
   roles: ['Prestamista']
 });
 assert.equal(person.creditStatus, 'nuevo');
+assert.equal(person.document, 'DNI 70000998');
+assert.equal(person.phone, '999000111');
+
+assert.throws(
+  () =>
+    createPerson(state, admin2, {
+      type: 'natural',
+      name: 'Documento Malo',
+      document: 'DNI 123',
+      phone: '999000000',
+      address: 'Direccion documento'
+    }),
+  /DNI debe tener 8 digitos/
+);
+
+assert.throws(
+  () =>
+    createPerson(state, admin2, {
+      type: 'natural',
+      name: 'Celular Malo',
+      document: 'DNI 70000994',
+      phone: '123',
+      address: 'Direccion celular'
+    }),
+  /Celular debe tener 9 digitos/
+);
+
+assert.throws(
+  () =>
+    createPerson(state, admin2, {
+      type: 'natural',
+      name: 'Correo Malo',
+      document: 'DNI 70000993',
+      phone: '999000333',
+      email: 'correo-malo',
+      address: 'Direccion correo'
+    }),
+  /Correo invalido/
+);
+
+assert.throws(
+  () =>
+    createPerson(state, admin2, {
+      type: 'natural',
+      name: 'Rol Malo',
+      document: 'DNI 70000992',
+      phone: '999000332',
+      address: 'Direccion rol',
+      roles: ['Cliente']
+    }),
+  /Rol invalido/
+);
+
+const associate = createPerson(state, admin2, {
+  type: 'empresa',
+  name: 'Empresa Backend',
+  document: 'RUC 20123456789',
+  phone: '999888777',
+  email: 'EMPRESA.BACKEND@example.local',
+  address: 'Av Empresa',
+  roles: ['Asociado']
+});
+assert.equal(associate.document, 'RUC 20123456789');
+assert.equal(associate.email, 'empresa.backend@example.local');
+assert.ok(people(state).some((item) => item.id === associate.id));
+assert.ok(peopleByRole(state, 'Asociado').some((item) => item.id === associate.id));
+assert.ok(peopleByRole(state, 'Prestamista').some((item) => item.id === person.id));
+assert.equal(personProfile(state, associate.id).summary.loanCount, 0);
 
 assert.throws(
   () =>

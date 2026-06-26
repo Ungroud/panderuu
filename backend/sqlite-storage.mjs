@@ -161,6 +161,18 @@ export const migrations = [
       ALTER TABLE actors ADD COLUMN created_at TEXT NOT NULL DEFAULT '';
       ALTER TABLE actors ADD COLUMN status TEXT NOT NULL DEFAULT 'activo';
     `
+  },
+  {
+    version: 5,
+    name: '005_normalize_people_contacts',
+    sql: `
+      UPDATE people
+      SET phone = replace(replace(replace(phone, ' ', ''), '-', ''), '.', '');
+
+      UPDATE people
+      SET email = lower(trim(email))
+      WHERE email IS NOT NULL;
+    `
   }
 ];
 
@@ -276,7 +288,7 @@ export function migrationSummary(db) {
 
 export function readStateFromDb(db) {
   return {
-    version: 4,
+    version: 5,
     actors: db
       .prepare(
         `SELECT id, name, admin_level AS adminLevel, seed_admin AS seedAdmin,

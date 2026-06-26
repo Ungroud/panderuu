@@ -71,6 +71,16 @@ El modelo documental completo se mantiene como direccion final; el backend v0 im
 | created_at | datetime | Fecha de registro. |
 | updated_at | datetime | Ultima actualizacion. |
 
+En backend v0, las personas se normalizan asi:
+
+```text
+natural -> document = DNI ########
+empresa -> document = RUC ###########
+phone -> 9 digitos
+email -> minusculas
+roles -> Administrador, Prestamista y/o Asociado
+```
+
 ## Usuarios
 
 | Campo | Tipo | Notas |

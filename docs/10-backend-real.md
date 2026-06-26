@@ -55,12 +55,14 @@ Personas:
 
 ```text
 Nombre obligatorio sin numeros.
-Documento obligatorio.
-Celular obligatorio.
+Persona natural usa DNI de 8 digitos.
+Empresa usa RUC de 11 digitos.
+Celular obligatorio de 9 digitos.
 Direccion obligatoria.
-Correo opcional, pero si existe debe contener @.
+Correo opcional, pero si existe debe tener formato valido.
 Documento o correo no pueden repetirse.
 Para recibir prestamos debe tener rol Prestamista.
+Roles permitidos: Administrador, Prestamista, Asociado.
 ```
 
 Caja:
@@ -146,6 +148,10 @@ Endpoints:
 | GET | `/health` | Verifica que el backend este vivo. |
 | GET | `/dashboard` | Devuelve resumen de caja, prestamos, pagos y boletas. |
 | GET | `/admins` | Devuelve administradores y persona vinculada cuando existe. |
+| GET | `/people` | Devuelve todas las personas registradas. |
+| GET | `/people/profile?id=...` | Devuelve perfil con prestamos, cuotas, pagos y boletas. |
+| GET | `/borrowers` | Devuelve personas con rol Prestamista. |
+| GET | `/associates` | Devuelve personas con rol Asociado. |
 | GET | `/state` | Devuelve el estado completo para depuracion local. |
 | GET | `/quotas` | Devuelve cuotas con estados actualizados por fecha. |
 | POST | `/admins` | Crea administradores; requiere nivel 3. |

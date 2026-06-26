@@ -10,6 +10,9 @@ import {
   createLoan,
   createPerson,
   dashboard,
+  people,
+  peopleByRole,
+  personProfile,
   refreshQuotaStatuses,
   registerPayment
 } from './domain.mjs';
@@ -44,6 +47,10 @@ const routes = [
   route('GET', '/health', ({ state }) => ({ ok: true, service: 'panderuu-backend', storage: dbPath, engine: 'sqlite', version: state.version })),
   route('GET', '/dashboard', ({ state }) => dashboard(state)),
   route('GET', '/admins', ({ state }) => administrators(state)),
+  route('GET', '/people', ({ state }) => people(state)),
+  route('GET', '/people/profile', ({ state, url }) => personProfile(state, url.searchParams.get('id'))),
+  route('GET', '/borrowers', ({ state }) => peopleByRole(state, 'Prestamista')),
+  route('GET', '/associates', ({ state }) => peopleByRole(state, 'Asociado')),
   route('GET', '/state', ({ state }) => {
     refreshQuotaStatuses(state);
     return state;
@@ -78,7 +85,7 @@ const server = createServer(async (request, response) => {
   try {
     const result =
       request.method === 'GET'
-        ? await handleReadRoute(found, request)
+        ? await handleReadRoute(found, request, url)
         : await handleWriteRoute(found, request);
     send(response, 200, { ok: true, data: result });
   } catch (error) {
@@ -93,10 +100,10 @@ server.listen(port, '0.0.0.0', () => {
   console.log(`SQLite: ${dbPath}`);
 });
 
-async function handleReadRoute(found, request) {
+async function handleReadRoute(found, request, url) {
   const state = loadSqliteState(dbPath);
   const actor = actorFromState(state, request);
-  return found.handler({ request, actor, state, payload: null });
+  return found.handler({ request, actor, state, payload: null, url });
 }
 
 async function handleWriteRoute(found, request) {

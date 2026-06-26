@@ -3,6 +3,7 @@ export const INITIAL_LOAN_LIMIT_CENTS = 15000;
 export const BASE_RATE_PERCENT = 5;
 export const DAILY_MORA_RATE = 0.001;
 export const ALLOWED_RATES = new Set([2, 5, 10]);
+export const ALLOWED_ROLES = ['Administrador', 'Prestamista', 'Asociado'];
 
 export function nowIso() {
   return new Date().toISOString();
@@ -89,30 +90,32 @@ export function createAudit(state, actor, action, entityType, entityId, result, 
 export function createPerson(state, actor, payload) {
   ensureStateCollections(state);
   requireAdminLevel(actor, 2, 'personas.crear');
+  const type = normalizePersonType(payload.type);
   if (!payload.name || /\d/.test(payload.name)) {
     throw validation('El nombre es obligatorio y no debe contener numeros');
   }
   if (!payload.document || !payload.phone || !payload.address) {
     throw validation('Documento, celular y direccion son obligatorios');
   }
-  if (payload.email && !String(payload.email).includes('@')) {
-    throw validation('Correo invalido');
-  }
+  const document = normalizeDocument(type, payload.document);
+  const phone = normalizePhone(payload.phone);
+  const email = normalizeEmail(payload.email);
+  const roles = normalizeRoles(Array.isArray(payload.roles) && payload.roles.length > 0 ? payload.roles : ['Prestamista']);
 
-  const exists = state.people.some((person) => person.document === payload.document || (payload.email && person.email === payload.email));
+  const exists = state.people.some((person) => person.document === document || (email && person.email === email));
   if (exists) {
     throw validation('Ya existe una persona con ese documento o correo');
   }
 
   const person = {
     id: id('person'),
-    type: payload.type === 'empresa' ? 'empresa' : 'natural',
+    type,
     name: payload.name.trim(),
-    document: payload.document.trim(),
-    phone: payload.phone.trim(),
-    email: payload.email?.trim() || '',
+    document,
+    phone,
+    email,
     address: payload.address.trim(),
-    roles: Array.isArray(payload.roles) && payload.roles.length > 0 ? payload.roles : ['Prestamista'],
+    roles,
     creditStatus: 'nuevo',
     loansCount: 0,
     punctualLoans: 0,
@@ -131,7 +134,7 @@ export function createAdmin(state, actor, payload) {
   const adminLevel = Number(payload.adminLevel);
   if (![1, 2, 3].includes(adminLevel)) throw validation('El nivel de administrador debe ser 1, 2 o 3');
 
-  const roles = uniqueRoles(['Administrador', ...(Array.isArray(payload.roles) ? payload.roles : [])]);
+  const roles = normalizeRoles(['Administrador', ...(Array.isArray(payload.roles) ? payload.roles : [])]);
   const person = createPerson(state, actor, {
     ...payload,
     roles
@@ -174,6 +177,45 @@ export function administrators(state) {
         person
       };
     });
+}
+
+export function people(state) {
+  ensureStateCollections(state);
+  return state.people;
+}
+
+export function peopleByRole(state, role) {
+  ensureStateCollections(state);
+  const normalizedRole = normalizeRole(role);
+  return state.people.filter((person) => person.roles.includes(normalizedRole));
+}
+
+export function personProfile(state, personId) {
+  ensureStateCollections(state);
+  if (!personId) throw validation('El id de persona es obligatorio');
+  const person = state.people.find((item) => item.id === personId);
+  if (!person) throw validation('Persona no encontrada');
+  const loans = state.loans.filter((loan) => loan.personId === person.id);
+  const loanIds = new Set(loans.map((loan) => loan.id));
+  const quotas = state.quotas.filter((quota) => loanIds.has(quota.loanId));
+  const payments = state.payments.filter((payment) => payment.personId === person.id);
+  const receipts = state.receipts.filter((receipt) => loanIds.has(receipt.loanId));
+  const admin = state.actors.find((actor) => actor.personId === person.id) || null;
+  return {
+    person,
+    admin,
+    loans,
+    quotas,
+    payments,
+    receipts,
+    summary: {
+      loanCount: loans.length,
+      activeLoanCount: loans.filter((loan) => loan.status !== 'pagado' && loan.status !== 'anulado').length,
+      paymentCount: payments.length,
+      quotaCount: quotas.length,
+      receiptCount: receipts.length
+    }
+  };
 }
 
 export function createLoan(state, actor, payload) {
@@ -438,8 +480,44 @@ function ensureStateCollections(state) {
   state.paymentApplications ||= [];
 }
 
-function uniqueRoles(roles) {
-  return [...new Set(roles.filter(Boolean).map((role) => String(role).trim()).filter(Boolean))];
+function normalizePersonType(type) {
+  const value = type ? String(type).trim().toLowerCase() : 'natural';
+  if (!['natural', 'empresa'].includes(value)) throw validation('Tipo de persona debe ser natural o empresa');
+  return value;
+}
+
+function normalizeDocument(type, document) {
+  const digits = String(document).replace(/\D/g, '');
+  if (type === 'empresa') {
+    if (digits.length !== 11) throw validation('RUC debe tener 11 digitos');
+    return `RUC ${digits}`;
+  }
+  if (digits.length !== 8) throw validation('DNI debe tener 8 digitos');
+  return `DNI ${digits}`;
+}
+
+function normalizePhone(phone) {
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length !== 9) throw validation('Celular debe tener 9 digitos');
+  return digits;
+}
+
+function normalizeEmail(email) {
+  const value = String(email || '').trim().toLowerCase();
+  if (!value) return '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw validation('Correo invalido');
+  return value;
+}
+
+function normalizeRoles(roles) {
+  return [...new Set(roles.map(normalizeRole))];
+}
+
+function normalizeRole(role) {
+  const value = String(role || '').trim().toLowerCase();
+  const found = ALLOWED_ROLES.find((allowed) => allowed.toLowerCase() === value);
+  if (!found) throw validation(`Rol invalido: ${role}`);
+  return found;
 }
 
 function createLoanQuotas(loan, installmentCount, loanDate) {
