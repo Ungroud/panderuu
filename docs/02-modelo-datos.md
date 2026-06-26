@@ -31,6 +31,26 @@ auditoria_eventos
 configuracion_sistema
 ```
 
+## Estado actual del backend v0
+
+SQLite ya contiene tablas operativas para:
+
+```text
+actors
+people
+loans
+loan_installments
+payments
+payment_applications
+cash_movements
+cash_closures
+receipts
+audit_events
+schema_migrations
+```
+
+El modelo documental completo se mantiene como direccion final; el backend v0 implementa las piezas necesarias para reglas de caja, prestamos, cuotas, pagos y auditoria.
+
 ## Personas
 
 | Campo | Tipo | Notas |
@@ -135,6 +155,28 @@ auditoria.ver
 | pagado_centimos | integer | Acumulado pagado. |
 | estado | enum | pendiente, prioritaria, parcial, pagada, vencida, anulada. |
 
+En backend v0 esta entidad vive en:
+
+```text
+loan_installments
+```
+
+Campos actuales:
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | text | Identificador. |
+| loan_id | text | Prestamo relacionado. |
+| number | integer | Numero de cuota. |
+| due_date | text | Fecha `YYYY-MM-DD`. |
+| capital_cents | integer | Capital asignado. |
+| interest_cents | integer | Interes asignado. |
+| mora_cents | integer | Mora, por ahora cero. |
+| total_cents | integer | Total de cuota. |
+| paid_cents | integer | Pagado acumulado. |
+| status | text | Estado de cuota. |
+| created_at | text | Fecha de creacion. |
+
 ## Pagos y detalles
 
 `pagos` registra la operacion general.
@@ -147,6 +189,14 @@ auditoria.ver
 - ajuste.
 
 Esto permite que un pago cierre varias cuotas y mantenga clasificacion contable.
+
+En backend v0, la aplicacion de pagos por cuota se guarda en:
+
+```text
+payment_applications
+```
+
+Cada registro indica pago, prestamo, cuota, monto aplicado y si esa cuota quedo cerrada.
 
 ## Movimientos de caja
 
@@ -209,4 +259,3 @@ Cada evento debe guardar:
 - Motivo.
 - Resultado: exitoso o fallido.
 - `operation_id` para evitar duplicados.
-

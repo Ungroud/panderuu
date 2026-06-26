@@ -121,6 +121,18 @@ El metodo por dias/plazos se mantiene:
 
 Las cuotas se calculan segun cantidad de meses y numero de cuotas. El modulo de meses deja de ser independiente; solo sirve para distribuir fechas y cuotas.
 
+Regla implementada en backend v0:
+
+```text
+Al crear un prestamo se generan automaticamente N cuotas.
+N = numero de cuotas indicado; si no se indica, N = cantidad de meses.
+Capital e interes se distribuyen en centimos entre las cuotas sin perder saldo.
+La primera cuota vence un mes despues de la fecha del prestamo.
+Las siguientes cuotas vencen mes a mes.
+```
+
+Si el reparto no divide exacto en centimos, las primeras cuotas reciben el centimo restante hasta cuadrar el total.
+
 Estados:
 
 - pendiente.
@@ -137,6 +149,7 @@ Reglas:
 - El pago se registra por formulario.
 - Puede cerrar una o mas cuotas.
 - Puede ser parcial.
+- Se aplica desde la cuota pendiente mas antigua del prestamo.
 - Actualiza caja.
 - Genera movimiento de caja.
 - Puede generar boleta.
@@ -215,4 +228,3 @@ Debe mostrar:
 - Fechas coherentes.
 - Cuotas mayores a cero.
 - Motivo obligatorio para anulaciones, reversas, ajustes, reimpresiones y restauraciones.
-

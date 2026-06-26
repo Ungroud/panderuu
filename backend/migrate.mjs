@@ -30,7 +30,9 @@ try {
           actors: state.actors.length,
           people: state.people.length,
           loans: state.loans.length,
+          quotas: state.quotas.length,
           payments: state.payments.length,
+          paymentApplications: state.paymentApplications.length,
           cashMovements: state.cashMovements.length,
           auditEvents: state.auditEvents.length
         }

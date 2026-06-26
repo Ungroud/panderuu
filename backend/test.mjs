@@ -10,6 +10,7 @@ import {
   createLoan,
   createPerson,
   dashboard,
+  quotaBalanceCents,
   registerPayment
 } from './domain.mjs';
 import { seedState } from './storage.mjs';
@@ -67,16 +68,51 @@ const loan = createLoan(state, admin2, {
 });
 assert.equal(loan.interestCents, 750);
 assert.equal(loan.totalCents, 15750);
+assert.equal(loan.quotas.length, 1);
+assert.equal(loan.quotas[0].totalCents, 15750);
 assert.equal(cashBalanceCents(state), 165000);
 
-const { payment, receipt } = registerPayment(state, admin2, {
+const { applications, payment, receipt } = registerPayment(state, admin2, {
   loanId: loan.id,
   amountCents: 15750,
   installmentsClosed: 1
 });
 assert.equal(payment.amountCents, 15750);
+assert.equal(payment.installmentsClosed, 1);
+assert.equal(applications.length, 1);
 assert.equal(receipt.balanceCents, 0);
+assert.equal(state.quotas.find((quota) => quota.loanId === loan.id).status, 'pagada');
 assert.equal(cashBalanceCents(state), 180750);
+
+const multiLoan = createLoan(state, admin2, {
+  personId: person.id,
+  capitalCents: 15000,
+  ratePercent: 5,
+  months: 3,
+  installments: 3,
+  loanDate: '2026-01-15'
+});
+const multiQuotas = state.quotas.filter((quota) => quota.loanId === multiLoan.id).sort((left, right) => left.number - right.number);
+assert.equal(multiQuotas.length, 3);
+assert.deepEqual(
+  multiQuotas.map((quota) => quota.dueDate),
+  ['2026-02-15', '2026-03-15', '2026-04-15']
+);
+assert.equal(multiQuotas.reduce((sum, quota) => sum + quota.totalCents, 0), multiLoan.totalCents);
+assert.equal(multiQuotas[0].totalCents, 5250);
+assert.equal(cashBalanceCents(state), 165750);
+
+const multiPayment = registerPayment(state, admin2, {
+  loanId: multiLoan.id,
+  amountCents: 10500
+});
+assert.equal(multiPayment.payment.installmentsClosed, 2);
+assert.equal(multiPayment.applications.length, 2);
+assert.equal(multiPayment.loan.status, 'activo');
+assert.equal(quotaBalanceCents(multiQuotas[0]), 0);
+assert.equal(quotaBalanceCents(multiQuotas[1]), 0);
+assert.equal(quotaBalanceCents(multiQuotas[2]), 5250);
+assert.equal(cashBalanceCents(state), 176250);
 
 const income = addCashIncome(state, admin2, { amountCents: 10000, reason: 'Ingreso demo test' });
 assert.equal(income.direction, 'entrada');
@@ -86,7 +122,8 @@ const close = closeCash(state, admin2, { countedCents: cashBalanceCents(state), 
 assert.equal(close.differenceCents, 0);
 
 const summary = dashboard(state);
-assert.equal(summary.receiptCount, 1);
+assert.equal(summary.receiptCount, 2);
+assert.equal(summary.quotaCount, 4);
 assert.ok(state.auditEvents.length >= 5);
 
 const testDir = join('.data', 'test', `backend-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`);
@@ -143,9 +180,11 @@ try {
     });
   });
   assert.equal(persistedLoan.totalCents, 15750);
+  assert.equal(persistedLoan.quotas.length, 1);
 
   const stateAfterLoan = loadSqliteState(sqlitePath);
   assert.ok(stateAfterLoan.loans.some((item) => item.id === persistedLoan.id));
+  assert.ok(stateAfterLoan.quotas.some((item) => item.loanId === persistedLoan.id));
   assert.equal(cashBalanceCents(stateAfterLoan), balanceBeforeRollback - 15000);
 } finally {
   rmSync(testDir, { recursive: true, force: true });

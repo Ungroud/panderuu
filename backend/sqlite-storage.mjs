@@ -114,6 +114,36 @@ export const migrations = [
         details_json TEXT NOT NULL
       );
     `
+  },
+  {
+    version: 2,
+    name: '002_loan_installments',
+    sql: `
+      CREATE TABLE IF NOT EXISTS loan_installments (
+        id TEXT PRIMARY KEY,
+        loan_id TEXT NOT NULL,
+        number INTEGER NOT NULL,
+        due_date TEXT NOT NULL,
+        capital_cents INTEGER NOT NULL,
+        interest_cents INTEGER NOT NULL,
+        mora_cents INTEGER NOT NULL DEFAULT 0,
+        total_cents INTEGER NOT NULL,
+        paid_cents INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS payment_applications (
+        id TEXT PRIMARY KEY,
+        payment_id TEXT NOT NULL,
+        loan_id TEXT NOT NULL,
+        quota_id TEXT,
+        quota_number INTEGER NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        closed_quota INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+    `
   }
 ];
 
@@ -229,7 +259,7 @@ export function migrationSummary(db) {
 
 export function readStateFromDb(db) {
   return {
-    version: 1,
+    version: 2,
     actors: db
       .prepare('SELECT id, name, admin_level AS adminLevel, seed_admin AS seedAdmin FROM actors ORDER BY rowid')
       .all()
@@ -270,6 +300,15 @@ export function readStateFromDb(db) {
       )
       .all()
       .map(toLoan),
+    quotas: db
+      .prepare(
+        `SELECT id, loan_id AS loanId, number, due_date AS dueDate, capital_cents AS capitalCents,
+          interest_cents AS interestCents, mora_cents AS moraCents, total_cents AS totalCents,
+          paid_cents AS paidCents, status, created_at AS createdAt
+        FROM loan_installments ORDER BY due_date ASC, number ASC`
+      )
+      .all()
+      .map(toQuota),
     payments: db
       .prepare(
         `SELECT id, loan_id AS loanId, person_id AS personId, person_name AS personName,
@@ -279,6 +318,15 @@ export function readStateFromDb(db) {
       )
       .all()
       .map(toPayment),
+    paymentApplications: db
+      .prepare(
+        `SELECT id, payment_id AS paymentId, loan_id AS loanId, quota_id AS quotaId,
+          quota_number AS quotaNumber, amount_cents AS amountCents,
+          closed_quota AS closedQuota, created_at AS createdAt
+        FROM payment_applications ORDER BY created_at DESC, rowid DESC`
+      )
+      .all()
+      .map(toPaymentApplication),
     cashMovements: db
       .prepare(
         `SELECT id, at, type, description, amount_cents AS amountCents, direction,
@@ -333,7 +381,9 @@ export function writeStateToDb(db, state) {
     DELETE FROM receipts;
     DELETE FROM cash_closures;
     DELETE FROM cash_movements;
+    DELETE FROM payment_applications;
     DELETE FROM payments;
+    DELETE FROM loan_installments;
     DELETE FROM loans;
     DELETE FROM people;
     DELETE FROM actors;
@@ -392,6 +442,28 @@ export function writeStateToDb(db, state) {
     );
   }
 
+  const insertQuota = db.prepare(`
+    INSERT INTO loan_installments (
+      id, loan_id, number, due_date, capital_cents, interest_cents, mora_cents,
+      total_cents, paid_cents, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const quota of state.quotas || []) {
+    insertQuota.run(
+      quota.id,
+      quota.loanId,
+      Number(quota.number),
+      quota.dueDate,
+      Number(quota.capitalCents),
+      Number(quota.interestCents),
+      Number(quota.moraCents || 0),
+      Number(quota.totalCents),
+      Number(quota.paidCents),
+      quota.status,
+      quota.createdAt
+    );
+  }
+
   const insertPayment = db.prepare(`
     INSERT INTO payments (
       id, loan_id, person_id, person_name, amount_cents, installments_closed, created_by, created_at
@@ -407,6 +479,24 @@ export function writeStateToDb(db, state) {
       Number(payment.installmentsClosed),
       payment.createdBy,
       payment.createdAt
+    );
+  }
+
+  const insertPaymentApplication = db.prepare(`
+    INSERT INTO payment_applications (
+      id, payment_id, loan_id, quota_id, quota_number, amount_cents, closed_quota, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const application of state.paymentApplications || []) {
+    insertPaymentApplication.run(
+      application.id,
+      application.paymentId,
+      application.loanId,
+      application.quotaId || null,
+      Number(application.quotaNumber),
+      Number(application.amountCents),
+      application.closedQuota ? 1 : 0,
+      application.createdAt
     );
   }
 
@@ -537,6 +627,35 @@ function toPayment(payment) {
     installmentsClosed: Number(payment.installmentsClosed),
     createdBy: payment.createdBy,
     createdAt: payment.createdAt
+  };
+}
+
+function toQuota(quota) {
+  return {
+    id: quota.id,
+    loanId: quota.loanId,
+    number: Number(quota.number),
+    dueDate: quota.dueDate,
+    capitalCents: Number(quota.capitalCents),
+    interestCents: Number(quota.interestCents),
+    moraCents: Number(quota.moraCents),
+    totalCents: Number(quota.totalCents),
+    paidCents: Number(quota.paidCents),
+    status: quota.status,
+    createdAt: quota.createdAt
+  };
+}
+
+function toPaymentApplication(application) {
+  return {
+    id: application.id,
+    paymentId: application.paymentId,
+    loanId: application.loanId,
+    quotaId: application.quotaId,
+    quotaNumber: Number(application.quotaNumber),
+    amountCents: Number(application.amountCents),
+    closedQuota: Boolean(application.closedQuota),
+    createdAt: application.createdAt
   };
 }
 

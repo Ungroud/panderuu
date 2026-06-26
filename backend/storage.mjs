@@ -5,7 +5,7 @@ export const defaultPath = '.data/backend/panderuu.json';
 
 export function seedState() {
   return {
-    version: 1,
+    version: 2,
     actors: [
       { id: 'admin-seed', name: 'Admin Semilla', adminLevel: 3, seedAdmin: true },
       { id: 'admin-caja', name: 'Caja Nivel 2', adminLevel: 2 },
@@ -44,7 +44,9 @@ export function seedState() {
       }
     ],
     loans: [],
+    quotas: [],
     payments: [],
+    paymentApplications: [],
     cashMovements: [
       {
         id: 'cash-seed',
@@ -79,4 +81,3 @@ export async function saveState(state, path = defaultPath) {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(state, null, 2), 'utf8');
 }
-

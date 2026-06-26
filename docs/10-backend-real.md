@@ -86,6 +86,17 @@ El pago genera boleta interna con correlativo.
 Si el pago completa el total, el prestamo queda pagado.
 ```
 
+Cuotas:
+
+```text
+Cada prestamo genera cuotas automaticamente.
+La cantidad de cuotas es la indicada en el prestamo o, si no existe, la cantidad de meses.
+Capital e interes se distribuyen en centimos sin perder saldo.
+Los pagos se aplican desde la cuota mas antigua pendiente.
+Un pago puede cerrar una o varias cuotas.
+Los estados de cuota se refrescan segun fecha actual: pendiente, prioritaria, parcial, pagada, vencida o anulada.
+```
+
 Auditoria:
 
 ```text
@@ -116,6 +127,7 @@ Endpoints:
 | GET | `/health` | Verifica que el backend este vivo. |
 | GET | `/dashboard` | Devuelve resumen de caja, prestamos, pagos y boletas. |
 | GET | `/state` | Devuelve el estado completo para depuracion local. |
+| GET | `/quotas` | Devuelve cuotas con estados actualizados por fecha. |
 | POST | `/people` | Crea prestamistas/asociados. |
 | POST | `/loans` | Crea prestamos y descuenta caja. |
 | POST | `/payments` | Registra pagos, genera caja y boleta. |
