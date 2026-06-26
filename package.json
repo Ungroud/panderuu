@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Panderuu desktop loan management software documentation and development orchestration.",
+  "type": "module",
   "scripts": {
     "agents": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agents.ps1",
     "backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup.ps1",
@@ -13,11 +14,18 @@
     "db:reset": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/db-reset.ps1",
     "db:seed": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/db-seed.ps1",
     "dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1",
+    "dev:web": "node scripts/static-server.mjs src 5173",
     "format": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/format.ps1",
+    "format:check": "node scripts/verify-static-app.mjs",
+    "format:write": "node scripts/verify-static-app.mjs",
     "lint": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/lint.ps1",
+    "lint:app": "node scripts/verify-static-app.mjs",
     "release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1",
     "status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/status.ps1",
     "test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test.ps1",
+    "test:app": "node scripts/verify-static-app.mjs",
+    "build:web": "node scripts/build-static-app.mjs",
+    "preview": "node scripts/static-server.mjs dist 4173",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1"
   }
 }

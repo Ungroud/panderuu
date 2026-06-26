@@ -13,18 +13,12 @@ if (-not (Test-Path (Join-Path $root 'src'))) {
   exit 0
 }
 
-if (-not (Test-Path (Join-Path $root 'node_modules'))) {
-  Write-PanderuuWarn 'Faltan dependencias. Ejecuta npm run bootstrap -- -Install.'
-  exit 1
-}
-
 if ($WebOnly) {
   Invoke-PanderuuChecked -FilePath 'npm' -Arguments @('run', 'dev:web') -WorkingDirectory $root
 } else {
-  if (Test-Path (Join-Path $root 'src-tauri')) {
+  if ((Test-Path (Join-Path $root 'src-tauri\Cargo.toml')) -and (Test-Path (Join-Path $root 'node_modules'))) {
     Invoke-PanderuuChecked -FilePath 'npm' -Arguments @('run', 'tauri:dev') -WorkingDirectory $root
   } else {
     Invoke-PanderuuChecked -FilePath 'npm' -Arguments @('run', 'dev:web') -WorkingDirectory $root
   }
 }
-

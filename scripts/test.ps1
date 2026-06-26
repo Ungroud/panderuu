@@ -12,13 +12,8 @@ Write-PanderuuStep 'Pruebas de documentacion y scripts'
 & (Join-Path $PSScriptRoot 'lint.ps1') -Strict:$Strict
 
 if ((Test-Path (Join-Path $root 'src')) -and (Test-PanderuuCommand 'npm')) {
-  if (Test-Path (Join-Path $root 'node_modules')) {
-    Write-PanderuuStep 'Pruebas frontend'
-    Invoke-PanderuuChecked -FilePath 'npm' -Arguments @('run', 'test:app') -WorkingDirectory $root
-  } else {
-    Write-PanderuuWarn 'No hay node_modules; se omiten pruebas frontend'
-    if ($Strict) { exit 1 }
-  }
+  Write-PanderuuStep 'Pruebas frontend'
+  Invoke-PanderuuChecked -FilePath 'npm' -Arguments @('run', 'test:app') -WorkingDirectory $root
 }
 
 if ((Test-Path (Join-Path $root 'src-tauri\Cargo.toml')) -and (Test-PanderuuCommand 'cargo')) {
@@ -29,4 +24,3 @@ if ((Test-Path (Join-Path $root 'src-tauri\Cargo.toml')) -and (Test-PanderuuComm
 }
 
 Write-PanderuuOk 'Pruebas finalizadas'
-

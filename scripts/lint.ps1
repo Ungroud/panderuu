@@ -47,11 +47,11 @@ if (Test-PanderuuCommand 'rg') {
 }
 
 if (Test-Path (Join-Path $root 'src')) {
-  if ((Test-Path (Join-Path $root 'node_modules')) -and (Test-PanderuuCommand 'npm')) {
+  if (Test-PanderuuCommand 'npm') {
     Write-PanderuuStep 'Lint de app'
     Invoke-PanderuuChecked -FilePath 'npm' -Arguments @('run', 'lint:app') -WorkingDirectory $root
   } else {
-    Write-PanderuuWarn 'App detectada, pero dependencias npm no instaladas'
+    Write-PanderuuWarn 'App detectada, pero npm no esta disponible'
     if ($Strict) { $failed = $true }
   }
 }
@@ -61,4 +61,3 @@ if ($failed) {
 }
 
 Write-PanderuuOk 'Lint finalizado'
-
