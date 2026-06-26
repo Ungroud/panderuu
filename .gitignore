@@ -15,6 +15,7 @@ dist/
 build/
 .vite/
 coverage/
+artifacts/
 
 # Tauri/Rust
 src-tauri/target/
@@ -31,4 +32,3 @@ Cargo.lock
 Thumbs.db
 .idea/
 .vscode/
-
