@@ -1,3 +1,16 @@
+import {
+  DEFAULT_TEMPORARY_PASSWORD,
+  SESSION_TTL_MS,
+  assertPasswordPolicy,
+  createSessionToken,
+  defaultUsernameForActor,
+  hashPassword,
+  hashSessionToken,
+  normalizeUsername,
+  usernameFromPerson,
+  verifyPassword
+} from './auth.mjs';
+
 export const PERMISSION_ERROR = 'permisos no autorizados';
 export const INITIAL_LOAN_LIMIT_CENTS = 15000;
 export const BASE_RATE_PERCENT = 5;
@@ -87,6 +100,135 @@ export function createAudit(state, actor, action, entityType, entityId, result, 
   });
 }
 
+export function login(state, payload) {
+  ensureStateCollections(state);
+  const username = safeNormalizeLoginUsername(payload?.username);
+  const actor = state.actors.find((item) => item.username === username);
+
+  if (!actor) {
+    createAudit(state, null, 'auth.login', 'actores', username || 'unknown', 'failed', { reason: 'not_found' });
+    throw authFailed();
+  }
+
+  if ((actor.status || 'activo') !== 'activo') {
+    createAudit(state, actor, 'auth.login', 'actores', actor.id, 'failed', { reason: 'inactive' });
+    throw authBlocked('Usuario inactivo', true);
+  }
+
+  if (!verifyPassword(payload?.password, actor.passwordHash)) {
+    actor.failedLoginCount = Number(actor.failedLoginCount || 0) + 1;
+    createAudit(state, actor, 'auth.login', 'actores', actor.id, 'failed', { reason: 'bad_password' });
+    throw authFailed();
+  }
+
+  const issuedAt = nowIso();
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  const token = createSessionToken();
+  const session = {
+    id: id('session'),
+    actorId: actor.id,
+    tokenHash: hashSessionToken(token),
+    createdAt: issuedAt,
+    expiresAt,
+    revokedAt: '',
+    lastSeenAt: issuedAt
+  };
+
+  actor.failedLoginCount = 0;
+  actor.lastLoginAt = issuedAt;
+  state.sessions.unshift(session);
+  createAudit(state, actor, 'auth.login', 'actores', actor.id, 'ok', { sessionId: session.id, expiresAt });
+
+  return {
+    token,
+    tokenType: 'Bearer',
+    expiresAt,
+    actor: publicActor(actor),
+    mustChangePassword: Boolean(actor.mustChangePassword)
+  };
+}
+
+export function authenticateSession(state, token) {
+  ensureStateCollections(state);
+  if (!token) throw authRequired();
+
+  const tokenHash = hashSessionToken(token);
+  const session = state.sessions.find((item) => item.tokenHash === tokenHash);
+  if (!session || session.revokedAt) throw authRequired('Sesion invalida');
+  if (new Date(session.expiresAt).getTime() <= Date.now()) throw authRequired('Sesion expirada', 'AUTH_EXPIRED');
+
+  const actor = state.actors.find((item) => item.id === session.actorId);
+  if (!actor) throw authRequired('Usuario de sesion no encontrado');
+  if ((actor.status || 'activo') !== 'activo') throw authBlocked('Usuario inactivo');
+
+  session.lastSeenAt = nowIso();
+  return { actor, session };
+}
+
+export function logoutSession(state, actor, session) {
+  ensureStateCollections(state);
+  if (!session) {
+    return { loggedOut: false, reason: 'Sesion no persistida' };
+  }
+
+  session.revokedAt = nowIso();
+  createAudit(state, actor, 'auth.logout', 'sesiones', session.id, 'ok', {});
+  return { loggedOut: true, sessionId: session.id };
+}
+
+export function changePassword(state, actor, session, payload) {
+  ensureStateCollections(state);
+  if (!verifyPassword(payload?.currentPassword, actor.passwordHash)) {
+    createAudit(state, actor, 'auth.change_password', 'actores', actor.id, 'failed', { reason: 'bad_current_password' });
+    throw authFailed('Clave actual incorrecta');
+  }
+
+  assertPasswordPolicy(payload?.newPassword);
+  actor.passwordHash = hashPassword(payload.newPassword);
+  actor.mustChangePassword = false;
+  for (const storedSession of state.sessions) {
+    if (storedSession.actorId === actor.id && storedSession.id !== session?.id && !storedSession.revokedAt) {
+      storedSession.revokedAt = nowIso();
+    }
+  }
+  createAudit(state, actor, 'auth.change_password', 'actores', actor.id, 'ok', {
+    keptSessionId: session?.id || null
+  });
+  return { actor: publicActor(actor) };
+}
+
+export function publicActor(actor) {
+  return {
+    id: actor.id,
+    name: actor.name,
+    adminLevel: Number(actor.adminLevel),
+    seedAdmin: Boolean(actor.seedAdmin),
+    personId: actor.personId || null,
+    createdBy: actor.createdBy || 'system',
+    createdAt: actor.createdAt || '',
+    status: actor.status || 'activo',
+    username: actor.username || defaultUsernameForActor(actor),
+    mustChangePassword: Boolean(actor.mustChangePassword),
+    lastLoginAt: actor.lastLoginAt || ''
+  };
+}
+
+export function safeDebugState(state) {
+  ensureStateCollections(state);
+  return {
+    ...state,
+    actors: state.actors.map(publicActor),
+    sessions: state.sessions.map((session) => ({
+      id: session.id,
+      actorId: session.actorId,
+      createdAt: session.createdAt,
+      expiresAt: session.expiresAt,
+      revokedAt: session.revokedAt,
+      lastSeenAt: session.lastSeenAt
+    }))
+  };
+}
+
 export function createPerson(state, actor, payload) {
   ensureStateCollections(state);
   requireAdminLevel(actor, 2, 'personas.crear');
@@ -139,6 +281,8 @@ export function createAdmin(state, actor, payload) {
     ...payload,
     roles
   });
+  const username = uniqueUsername(state, payload.username ? normalizeUsername(payload.username) : usernameFromPerson(person));
+  const temporaryPassword = payload.password || DEFAULT_TEMPORARY_PASSWORD;
   const admin = {
     id: id('admin'),
     name: person.name,
@@ -147,16 +291,27 @@ export function createAdmin(state, actor, payload) {
     personId: person.id,
     createdBy: actor.id,
     createdAt: nowIso(),
-    status: 'activo'
+    status: 'activo',
+    username,
+    passwordHash: hashPassword(temporaryPassword),
+    mustChangePassword: true,
+    failedLoginCount: 0,
+    lastLoginAt: '',
+    lockedUntil: ''
   };
 
   state.actors.unshift(admin);
   createAudit(state, actor, 'administradores.crear', 'actores', admin.id, 'ok', {
     personId: person.id,
     adminLevel,
-    roles: person.roles
+    roles: person.roles,
+    username
   });
-  return { admin, person };
+  return {
+    admin: publicActor(admin),
+    person,
+    temporaryPassword: payload.password ? undefined : DEFAULT_TEMPORARY_PASSWORD
+  };
 }
 
 export function administrators(state) {
@@ -166,14 +321,7 @@ export function administrators(state) {
     .map((actor) => {
       const person = actor.personId ? state.people.find((item) => item.id === actor.personId) : null;
       return {
-        id: actor.id,
-        name: actor.name,
-        adminLevel: Number(actor.adminLevel),
-        seedAdmin: Boolean(actor.seedAdmin),
-        status: actor.status || 'activo',
-        personId: actor.personId || null,
-        createdBy: actor.createdBy || 'system',
-        createdAt: actor.createdAt || '',
+        ...publicActor(actor),
         person
       };
     });
@@ -476,8 +624,69 @@ function createReceipt(state, actor, loan, payment) {
 }
 
 function ensureStateCollections(state) {
+  state.actors ||= [];
+  state.people ||= [];
+  state.loans ||= [];
+  state.payments ||= [];
+  state.cashMovements ||= [];
+  state.cashClosures ||= [];
+  state.receipts ||= [];
+  state.auditEvents ||= [];
   state.quotas ||= [];
   state.paymentApplications ||= [];
+  state.sessions ||= [];
+
+  for (const actor of state.actors) {
+    actor.username ||= defaultUsernameForActor(actor);
+    actor.passwordHash ||= hashPassword(DEFAULT_TEMPORARY_PASSWORD);
+    actor.mustChangePassword = actor.mustChangePassword === false || actor.mustChangePassword === 0 ? false : true;
+    actor.failedLoginCount = Number(actor.failedLoginCount || 0);
+    actor.lastLoginAt ||= '';
+    actor.lockedUntil ||= '';
+    actor.status ||= 'activo';
+    actor.createdBy ||= 'system';
+    actor.createdAt ||= '';
+  }
+}
+
+function safeNormalizeLoginUsername(username) {
+  try {
+    return normalizeUsername(username);
+  } catch {
+    return String(username || '').trim().toLowerCase();
+  }
+}
+
+function uniqueUsername(state, requestedUsername) {
+  const base = normalizeUsername(requestedUsername);
+  let candidate = base;
+  let suffix = 2;
+  const usernames = new Set(state.actors.map((actor) => actor.username));
+  while (usernames.has(candidate)) {
+    candidate = normalizeUsername(`${base}-${suffix}`);
+    suffix += 1;
+  }
+  return candidate;
+}
+
+function authFailed(message = 'Credenciales invalidas') {
+  const error = new Error(message);
+  error.code = 'AUTH_FAILED';
+  error.audited = true;
+  return error;
+}
+
+function authRequired(message = 'Autenticacion requerida', code = 'AUTH_REQUIRED') {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function authBlocked(message, audited = false) {
+  const error = new Error(message);
+  error.code = 'AUTH_BLOCKED';
+  error.audited = audited;
+  return error;
 }
 
 function normalizePersonType(type) {

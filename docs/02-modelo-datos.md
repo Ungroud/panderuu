@@ -31,7 +31,7 @@ auditoria_eventos
 configuracion_sistema
 ```
 
-## Estado actual del backend v0
+## Estado actual del backend v1
 
 SQLite ya contiene tablas operativas para:
 
@@ -45,11 +45,12 @@ payment_applications
 cash_movements
 cash_closures
 receipts
+sessions
 audit_events
 schema_migrations
 ```
 
-El modelo documental completo se mantiene como direccion final; el backend v0 implementa las piezas necesarias para reglas de caja, prestamos, cuotas, pagos y auditoria.
+El modelo documental completo se mantiene como direccion final; el backend v1 implementa las piezas necesarias para reglas de caja, prestamos, cuotas, pagos, autenticacion, sesiones y auditoria.
 
 ## Personas
 
@@ -71,7 +72,7 @@ El modelo documental completo se mantiene como direccion final; el backend v0 im
 | created_at | datetime | Fecha de registro. |
 | updated_at | datetime | Ultima actualizacion. |
 
-En backend v0, las personas se normalizan asi:
+En backend v1, las personas se normalizan asi:
 
 ```text
 natural -> document = DNI ########
@@ -96,7 +97,7 @@ roles -> Administrador, Prestamista y/o Asociado
 | created_by | uuid | Administrador que creo. |
 | created_at | datetime | Registro. |
 
-En backend v0, los usuarios administradores viven en:
+En backend v1, los usuarios administradores viven en:
 
 ```text
 actors
@@ -114,6 +115,30 @@ Campos actuales:
 | created_by | text | Administrador que lo creo. |
 | created_at | text | Fecha de creacion. |
 | status | text | `activo` por defecto. |
+| username | text | Usuario unico de login. |
+| password_hash | text | Hash `scrypt` de la clave. |
+| must_change_password | integer | Cambio obligatorio de clave. |
+| failed_login_count | integer | Intentos fallidos acumulados. |
+| last_login_at | text | Ultimo login exitoso. |
+| locked_until | text | Reservado para bloqueo temporal. |
+
+## Sesiones
+
+En backend v1 las sesiones viven en:
+
+```text
+sessions
+```
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | text | Identificador de sesion. |
+| actor_id | text | Administrador autenticado. |
+| token_hash | text | SHA-256 del token Bearer, no el token real. |
+| created_at | text | Fecha de login. |
+| expires_at | text | Vencimiento de sesion. |
+| revoked_at | text | Fecha de logout o revocacion. |
+| last_seen_at | text | Ultimo uso observado. |
 
 ## Roles y permisos
 
@@ -184,7 +209,7 @@ auditoria.ver
 | pagado_centimos | integer | Acumulado pagado. |
 | estado | enum | pendiente, prioritaria, parcial, pagada, vencida, anulada. |
 
-En backend v0 esta entidad vive en:
+En backend v1 esta entidad vive en:
 
 ```text
 loan_installments
@@ -219,7 +244,7 @@ Campos actuales:
 
 Esto permite que un pago cierre varias cuotas y mantenga clasificacion contable.
 
-En backend v0, la aplicacion de pagos por cuota se guarda en:
+En backend v1, la aplicacion de pagos por cuota se guarda en:
 
 ```text
 payment_applications

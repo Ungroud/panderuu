@@ -23,7 +23,7 @@ Reglas:
 - Solo nivel 3 puede crear otros administradores.
 - Los administradores creados despues deben quedar ligados al administrador que los registro.
 
-Regla implementada en backend v0:
+Regla implementada en backend v1:
 
 ```text
 Solo un administrador nivel 3 puede crear administradores.
@@ -33,6 +33,19 @@ Todo intento de nivel 1 o 2 para crear administradores responde "permisos no aut
 ```
 
 Un administrador tambien puede tener rol `Prestamista` si se desea habilitarlo para recibir prestamos.
+
+### Autenticacion
+
+Reglas:
+
+- Cada administrador tiene usuario unico y clave propia.
+- La cuenta semilla y las cuentas nuevas inician con cambio obligatorio de clave.
+- La clave se guarda como hash, nunca en texto plano.
+- El login crea una sesion con token Bearer y vencimiento.
+- El logout revoca la sesion.
+- El cambio de clave requiere clave actual y revoca otras sesiones del mismo administrador.
+- Los intentos de login exitosos y fallidos se guardan en auditoria.
+- El header `x-actor-id` solo puede usarse en desarrollo local con `PANDERUU_DEV_AUTH=1`.
 
 ### Permisos por nivel
 
@@ -95,7 +108,7 @@ Reglas:
 - Puede acumular rol Prestamista si recibira prestamos.
 - El asociado mantiene historial de registros, prestamos, pagos, boletas y observaciones.
 
-Regla implementada en backend v0:
+Regla implementada en backend v1:
 
 ```text
 Persona natural: DNI de 8 digitos.
@@ -142,7 +155,7 @@ El metodo por dias/plazos se mantiene:
 
 Las cuotas se calculan segun cantidad de meses y numero de cuotas. El modulo de meses deja de ser independiente; solo sirve para distribuir fechas y cuotas.
 
-Regla implementada en backend v0:
+Regla implementada en backend v1:
 
 ```text
 Al crear un prestamo se generan automaticamente N cuotas.

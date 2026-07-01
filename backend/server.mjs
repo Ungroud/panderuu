@@ -4,27 +4,44 @@ import {
   PERMISSION_ERROR,
   addCashIncome,
   administrators,
+  authenticateSession,
+  changePassword,
   closeCash,
   createAudit,
   createAdmin,
   createLoan,
   createPerson,
   dashboard,
+  login,
+  logoutSession,
   people,
   peopleByRole,
   personProfile,
+  publicActor,
   refreshQuotaStatuses,
-  registerPayment
+  registerPayment,
+  safeDebugState
 } from './domain.mjs';
 import { defaultSqlitePath, loadSqliteState, withSqliteStateTransaction } from './sqlite-storage.mjs';
 
 const port = Number(process.env.PANDERUU_BACKEND_PORT || 5180);
 const dbPath = process.env.PANDERUU_DB_SQLITE || defaultSqlitePath;
+const devActorHeaderEnabled = process.env.PANDERUU_DEV_AUTH === '1';
 
-function actorFromState(state, request) {
-  const actorId = request.headers['x-actor-id'] || 'admin-seed';
-  const actor = state.actors.find((item) => item.id === actorId);
-  return actor || { id: 'anonymous', name: 'anonymous', adminLevel: 0 };
+function authenticateRequest(state, request) {
+  const authorization = request.headers.authorization || '';
+  const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (token) return authenticateSession(state, token);
+
+  if (devActorHeaderEnabled) {
+    const actorId = request.headers['x-actor-id'] || 'admin-seed';
+    const actor = state.actors.find((item) => item.id === actorId);
+    if (actor) return { actor, session: null, mode: 'dev-header' };
+  }
+
+  const error = new Error('Autenticacion requerida');
+  error.code = 'AUTH_REQUIRED';
+  throw error;
 }
 
 async function readJson(request) {
@@ -39,12 +56,18 @@ function send(response, status, payload) {
   response.end(JSON.stringify(payload, null, 2));
 }
 
-function route(method, path, handler) {
-  return { method, path, handler };
+function route(method, path, handler, options = {}) {
+  return { method, path, handler, auth: options.auth !== false };
 }
 
 const routes = [
-  route('GET', '/health', ({ state }) => ({ ok: true, service: 'panderuu-backend', storage: dbPath, engine: 'sqlite', version: state.version })),
+  route('GET', '/health', ({ state }) => ({ ok: true, service: 'panderuu-backend', storage: dbPath, engine: 'sqlite', version: state.version }), {
+    auth: false
+  }),
+  route('POST', '/auth/login', ({ state, payload }) => login(state, payload), { auth: false }),
+  route('POST', '/auth/logout', ({ state, actor, session }) => logoutSession(state, actor, session)),
+  route('POST', '/auth/change-password', ({ state, actor, session, payload }) => changePassword(state, actor, session, payload)),
+  route('GET', '/auth/me', ({ actor }) => ({ actor: publicActor(actor) })),
   route('GET', '/dashboard', ({ state }) => dashboard(state)),
   route('GET', '/admins', ({ state }) => administrators(state)),
   route('GET', '/people', ({ state }) => people(state)),
@@ -53,7 +76,7 @@ const routes = [
   route('GET', '/associates', ({ state }) => peopleByRole(state, 'Asociado')),
   route('GET', '/state', ({ state }) => {
     refreshQuotaStatuses(state);
-    return state;
+    return safeDebugState(state);
   }),
   route('GET', '/quotas', ({ state }) => refreshQuotaStatuses(state)),
   route('POST', '/admins', ({ state, actor, payload }) => createAdmin(state, actor, payload)),
@@ -69,7 +92,7 @@ const server = createServer(async (request, response) => {
     response.writeHead(204, {
       'access-control-allow-origin': '*',
       'access-control-allow-methods': 'GET,POST,OPTIONS',
-      'access-control-allow-headers': 'content-type,x-actor-id'
+      'access-control-allow-headers': 'content-type,authorization,x-actor-id'
     });
     response.end();
     return;
@@ -90,7 +113,16 @@ const server = createServer(async (request, response) => {
     send(response, 200, { ok: true, data: result });
   } catch (error) {
     recordFailedRequest(request, url.pathname, error);
-    const status = error.message === PERMISSION_ERROR ? 403 : error.code === 'VALIDATION_ERROR' ? 400 : 500;
+    const status =
+      error.message === PERMISSION_ERROR
+        ? 403
+        : error.code === 'VALIDATION_ERROR'
+          ? 400
+          : ['AUTH_REQUIRED', 'AUTH_FAILED', 'AUTH_EXPIRED'].includes(error.code)
+            ? 401
+            : error.code === 'AUTH_BLOCKED'
+              ? 403
+              : 500;
     send(response, status, { ok: false, error: error.message, code: error.code || 'INTERNAL_ERROR' });
   }
 });
@@ -102,27 +134,36 @@ server.listen(port, '0.0.0.0', () => {
 
 async function handleReadRoute(found, request, url) {
   const state = loadSqliteState(dbPath);
-  const actor = actorFromState(state, request);
-  return found.handler({ request, actor, state, payload: null, url });
+  const auth = found.auth ? authenticateRequest(state, request) : { actor: null, session: null };
+  return found.handler({ request, actor: auth.actor, session: auth.session, state, payload: null, url });
 }
 
 async function handleWriteRoute(found, request) {
   const payload = await readJson(request);
   return withSqliteStateTransaction(dbPath, (state) => {
-    const actor = actorFromState(state, request);
-    return found.handler({ request, actor, state, payload });
+    const auth = found.auth ? authenticateRequest(state, request) : { actor: null, session: null };
+    return found.handler({ request, actor: auth.actor, session: auth.session, state, payload });
   });
 }
 
 function recordFailedRequest(request, pathname, error) {
+  if (error.audited) return;
   try {
     withSqliteStateTransaction(dbPath, (state) => {
-      const actor = actorFromState(state, request);
+      const actor = actorOrAnonymous(state, request);
       createAudit(state, actor, error.action || `${request.method} ${pathname}`, 'request', pathname, 'failed', {
         message: error.message
       });
     });
   } catch (auditError) {
     console.error('No se pudo registrar auditoria fallida:', auditError.message);
+  }
+}
+
+function actorOrAnonymous(state, request) {
+  try {
+    return authenticateRequest(state, request).actor;
+  } catch {
+    return { id: 'anonymous', name: 'anonymous', adminLevel: 0 };
   }
 }

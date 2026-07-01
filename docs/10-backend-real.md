@@ -1,4 +1,4 @@
-# Backend real v0
+# Backend real v1
 
 ## Objetivo
 
@@ -24,6 +24,12 @@ Implementacion actual:
 
 ```text
 El backend usa node:sqlite, migraciones internas y transacciones BEGIN IMMEDIATE / COMMIT / ROLLBACK.
+```
+
+Regla aplicada para autenticacion:
+
+```text
+Las claves no se guardan en texto plano. Cada clave se almacena como hash scrypt; las sesiones se guardan como hash SHA-256 del token; las rutas reales usan Authorization: Bearer <token>. El header x-actor-id queda solo para desarrollo local cuando PANDERUU_DEV_AUTH=1.
 ```
 
 ## Reglas codificadas
@@ -125,6 +131,16 @@ Las acciones exitosas y fallidas se registran en auditEvents.
 Se registra actor, nivel, accion, entidad, resultado y detalles.
 ```
 
+Autenticacion:
+
+```text
+El login crea una sesion persistida con vencimiento.
+El token real solo se entrega al iniciar sesion y no se guarda en la base.
+El cierre de sesion revoca la sesion.
+El cambio de clave exige clave actual y revoca otras sesiones del mismo actor.
+Las claves temporales deben cambiarse antes de operar en produccion.
+```
+
 ## API local
 
 Servidor:
@@ -146,6 +162,10 @@ Endpoints:
 | Metodo | Ruta | Uso |
 |---|---|---|
 | GET | `/health` | Verifica que el backend este vivo. |
+| POST | `/auth/login` | Inicia sesion y devuelve token Bearer. |
+| GET | `/auth/me` | Devuelve el administrador autenticado. |
+| POST | `/auth/change-password` | Cambia clave del administrador autenticado. |
+| POST | `/auth/logout` | Revoca la sesion actual. |
 | GET | `/dashboard` | Devuelve resumen de caja, prestamos, pagos y boletas. |
 | GET | `/admins` | Devuelve administradores y persona vinculada cuando existe. |
 | GET | `/people` | Devuelve todas las personas registradas. |
@@ -163,25 +183,45 @@ Endpoints:
 
 ## Usuarios semilla
 
-El backend inicia con actores de prueba:
+El backend inicia con actores de prueba y clave temporal local:
 
-| Id | Nivel | Uso |
-|---|---:|---|
-| `admin-seed` | 3 | Administrador semilla. |
-| `admin-caja` | 2 | Operacion de caja y prestamos. |
-| `admin-reportes` | 1 | Usuario para probar bloqueos de permisos. |
+| Id | Usuario | Nivel | Uso |
+|---|---|---:|---|
+| `admin-seed` | `admin.seed` | 3 | Administrador semilla. |
+| `admin-caja` | `caja.nivel2` | 2 | Operacion de caja y prestamos. |
+| `admin-reportes` | `reportes.nivel1` | 1 | Usuario para probar bloqueos de permisos. |
 
-Para llamar la API se puede usar el header:
+Clave temporal de desarrollo:
+
+```text
+Panderuu123!
+```
+
+Ejemplo de login:
+
+```powershell
+Invoke-RestMethod -Method POST http://localhost:5180/auth/login -ContentType 'application/json' -Body '{"username":"admin.seed","password":"Panderuu123!"}'
+```
+
+Para llamar la API real se usa el token:
+
+```text
+Authorization: Bearer <token>
+```
+
+En desarrollo local, el script `npm run backend:dev` activa `PANDERUU_DEV_AUTH=1`. Con ese modo se puede usar el header de prueba:
 
 ```text
 x-actor-id: admin-caja
 ```
 
-Si no se manda header, el backend usa:
+Si no se manda header ni token en modo desarrollo, el backend usa:
 
 ```text
 admin-seed
 ```
+
+Este comportamiento no debe usarse para produccion.
 
 ## Pendiente antes de avanzar
 

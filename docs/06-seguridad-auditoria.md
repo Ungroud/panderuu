@@ -16,7 +16,7 @@
 - Autenticacion obligatoria.
 - Usuarios individuales.
 - Hash seguro de contrasenas.
-- Bloqueo por intentos fallidos.
+- Conteo de intentos fallidos; el bloqueo automatico queda reservado para la siguiente iteracion.
 - Sesion con expiracion.
 - Permisos verificados en backend.
 - Auditoria de acciones exitosas y fallidas.
@@ -24,6 +24,17 @@
 - Motivo obligatorio en acciones criticas.
 - Backups automaticos y manuales.
 - Reversas en vez de borrados.
+
+## Estado implementado en backend v1
+
+- Login con usuario y clave.
+- Hash de clave con `scrypt`.
+- Sesiones persistidas con hash del token, no con token plano.
+- Token Bearer para rutas reales.
+- Logout con revocacion de sesion.
+- Cambio de clave con validacion de clave actual.
+- Auditoria de login exitoso, login fallido, logout y cambio de clave.
+- Header `x-actor-id` limitado a desarrollo local con `PANDERUU_DEV_AUTH=1`.
 
 ## Acciones criticas
 
@@ -122,4 +133,3 @@ Puntos a controlar:
 - Mora eliminada sin evidencia.
 - Caja cerrada con diferencia sin observacion.
 - Restauracion que pisa informacion reciente.
-

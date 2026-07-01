@@ -1,15 +1,17 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { DEFAULT_TEMPORARY_PASSWORD, hashPassword } from './auth.mjs';
 
 export const defaultPath = '.data/backend/panderuu.json';
 
 export function seedState() {
+  const createdAt = new Date().toISOString();
   return {
-    version: 5,
+    version: 6,
     actors: [
-      { id: 'admin-seed', name: 'Admin Semilla', adminLevel: 3, seedAdmin: true, personId: null, createdBy: 'system', createdAt: new Date().toISOString(), status: 'activo' },
-      { id: 'admin-caja', name: 'Caja Nivel 2', adminLevel: 2, personId: null, createdBy: 'admin-seed', createdAt: new Date().toISOString(), status: 'activo' },
-      { id: 'admin-reportes', name: 'Informes Nivel 1', adminLevel: 1, personId: null, createdBy: 'admin-seed', createdAt: new Date().toISOString(), status: 'activo' }
+      seedActor('admin-seed', 'Admin Semilla', 3, 'admin.seed', true, createdAt),
+      seedActor('admin-caja', 'Caja Nivel 2', 2, 'caja.nivel2', false, createdAt),
+      seedActor('admin-reportes', 'Informes Nivel 1', 1, 'reportes.nivel1', false, createdAt)
     ],
     people: [
       {
@@ -62,7 +64,27 @@ export function seedState() {
     ],
     cashClosures: [],
     receipts: [],
-    auditEvents: []
+    auditEvents: [],
+    sessions: []
+  };
+}
+
+function seedActor(id, name, adminLevel, username, seedAdmin, createdAt) {
+  return {
+    id,
+    name,
+    adminLevel,
+    seedAdmin,
+    personId: null,
+    createdBy: seedAdmin ? 'system' : 'admin-seed',
+    createdAt,
+    status: 'activo',
+    username,
+    passwordHash: hashPassword(DEFAULT_TEMPORARY_PASSWORD),
+    mustChangePassword: true,
+    failedLoginCount: 0,
+    lastLoginAt: '',
+    lockedUntil: ''
   };
 }
 

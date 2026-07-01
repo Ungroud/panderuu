@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { DEFAULT_TEMPORARY_PASSWORD, defaultUsernameForActor, hashPassword } from './auth.mjs';
 import { nowIso } from './domain.mjs';
 import { seedState } from './storage.mjs';
 
@@ -173,6 +174,32 @@ export const migrations = [
       SET email = lower(trim(email))
       WHERE email IS NOT NULL;
     `
+  },
+  {
+    version: 6,
+    name: '006_auth_sessions',
+    sql: `
+      ALTER TABLE actors ADD COLUMN username TEXT;
+      ALTER TABLE actors ADD COLUMN password_hash TEXT;
+      ALTER TABLE actors ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE actors ADD COLUMN failed_login_count INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE actors ADD COLUMN last_login_at TEXT NOT NULL DEFAULT '';
+      ALTER TABLE actors ADD COLUMN locked_until TEXT NOT NULL DEFAULT '';
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_actors_username
+        ON actors(username)
+        WHERE username IS NOT NULL;
+
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        actor_id TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked_at TEXT NOT NULL DEFAULT '',
+        last_seen_at TEXT NOT NULL
+      );
+    `
   }
 ];
 
@@ -230,11 +257,47 @@ export function ensureSeeded(db) {
   }
 }
 
+export function ensureAuthDefaults(db) {
+  const actors = db
+    .prepare(
+      `SELECT id, name, username, password_hash AS passwordHash,
+        must_change_password AS mustChangePassword, failed_login_count AS failedLoginCount
+      FROM actors`
+    )
+    .all();
+
+  const missing = actors.filter((actor) => !actor.username || !actor.passwordHash);
+  if (missing.length === 0) return false;
+
+  const update = db.prepare(`
+    UPDATE actors
+    SET username = ?, password_hash = ?, must_change_password = 1, failed_login_count = 0
+    WHERE id = ?
+  `);
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const actor of missing) {
+      update.run(
+        actor.username || defaultUsernameForActor(actor),
+        actor.passwordHash || hashPassword(DEFAULT_TEMPORARY_PASSWORD),
+        actor.id
+      );
+    }
+    db.exec('COMMIT');
+    return true;
+  } catch (error) {
+    rollbackQuietly(db);
+    throw error;
+  }
+}
+
 export function loadSqliteState(path = defaultSqlitePath) {
   const db = openDatabase(path);
   try {
     migrateDatabase(db);
     ensureSeeded(db);
+    ensureAuthDefaults(db);
     return readStateFromDb(db);
   } finally {
     db.close();
@@ -245,6 +308,7 @@ export function saveSqliteState(state, path = defaultSqlitePath) {
   const db = openDatabase(path);
   try {
     migrateDatabase(db);
+    ensureAuthDefaults(db);
     db.exec('BEGIN IMMEDIATE');
     try {
       writeStateToDb(db, state);
@@ -263,6 +327,7 @@ export function withSqliteStateTransaction(path = defaultSqlitePath, mutator, op
   try {
     migrateDatabase(db);
     ensureSeeded(db);
+    ensureAuthDefaults(db);
     db.exec('BEGIN IMMEDIATE');
     try {
       const state = readStateFromDb(db);
@@ -288,11 +353,13 @@ export function migrationSummary(db) {
 
 export function readStateFromDb(db) {
   return {
-    version: 5,
+    version: 6,
     actors: db
       .prepare(
         `SELECT id, name, admin_level AS adminLevel, seed_admin AS seedAdmin,
-          person_id AS personId, created_by AS createdBy, created_at AS createdAt, status
+          person_id AS personId, created_by AS createdBy, created_at AS createdAt, status,
+          username, password_hash AS passwordHash, must_change_password AS mustChangePassword,
+          failed_login_count AS failedLoginCount, last_login_at AS lastLoginAt, locked_until AS lockedUntil
         FROM actors ORDER BY rowid`
       )
       .all()
@@ -303,7 +370,13 @@ export function readStateFromDb(db) {
         personId: actor.personId || null,
         createdBy: actor.createdBy || 'system',
         createdAt: actor.createdAt || '',
-        status: actor.status || 'activo'
+        status: actor.status || 'activo',
+        username: actor.username,
+        passwordHash: actor.passwordHash,
+        mustChangePassword: Boolean(actor.mustChangePassword),
+        failedLoginCount: Number(actor.failedLoginCount || 0),
+        lastLoginAt: actor.lastLoginAt || '',
+        lockedUntil: actor.lockedUntil || ''
       })),
     people: db
       .prepare(
@@ -408,12 +481,29 @@ export function readStateFromDb(db) {
         entityId: event.entityId,
         result: event.result,
         details: parseJson(event.detailsJson, {})
+      })),
+    sessions: db
+      .prepare(
+        `SELECT id, actor_id AS actorId, token_hash AS tokenHash, created_at AS createdAt,
+          expires_at AS expiresAt, revoked_at AS revokedAt, last_seen_at AS lastSeenAt
+        FROM sessions ORDER BY created_at DESC, rowid DESC`
+      )
+      .all()
+      .map((session) => ({
+        id: session.id,
+        actorId: session.actorId,
+        tokenHash: session.tokenHash,
+        createdAt: session.createdAt,
+        expiresAt: session.expiresAt,
+        revokedAt: session.revokedAt || '',
+        lastSeenAt: session.lastSeenAt
       }))
   };
 }
 
 export function writeStateToDb(db, state) {
   db.exec(`
+    DELETE FROM sessions;
     DELETE FROM audit_events;
     DELETE FROM receipts;
     DELETE FROM cash_closures;
@@ -426,7 +516,12 @@ export function writeStateToDb(db, state) {
     DELETE FROM actors;
   `);
 
-  const insertActor = db.prepare('INSERT INTO actors (id, name, admin_level, seed_admin, person_id, created_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  const insertActor = db.prepare(`
+    INSERT INTO actors (
+      id, name, admin_level, seed_admin, person_id, created_by, created_at, status,
+      username, password_hash, must_change_password, failed_login_count, last_login_at, locked_until
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
   for (const actor of state.actors) {
     insertActor.run(
       actor.id,
@@ -436,7 +531,13 @@ export function writeStateToDb(db, state) {
       actor.personId || null,
       actor.createdBy || 'system',
       actor.createdAt || '',
-      actor.status || 'activo'
+      actor.status || 'activo',
+      actor.username || defaultUsernameForActor(actor),
+      actor.passwordHash || hashPassword(DEFAULT_TEMPORARY_PASSWORD),
+      actor.mustChangePassword === false ? 0 : 1,
+      Number(actor.failedLoginCount || 0),
+      actor.lastLoginAt || '',
+      actor.lockedUntil || ''
     );
   }
 
@@ -626,6 +727,23 @@ export function writeStateToDb(db, state) {
       event.entityId,
       event.result,
       JSON.stringify(event.details || {})
+    );
+  }
+
+  const insertSession = db.prepare(`
+    INSERT INTO sessions (
+      id, actor_id, token_hash, created_at, expires_at, revoked_at, last_seen_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const session of state.sessions || []) {
+    insertSession.run(
+      session.id,
+      session.actorId,
+      session.tokenHash,
+      session.createdAt,
+      session.expiresAt,
+      session.revokedAt || '',
+      session.lastSeenAt || session.createdAt
     );
   }
 }

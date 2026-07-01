@@ -19,5 +19,6 @@ if ($StoragePath.Trim().Length -gt 0) {
 }
 
 $env:PANDERUU_BACKEND_PORT = [string]$Port
-Write-PanderuuStep "Backend real v0 en http://localhost:$Port"
+$env:PANDERUU_DEV_AUTH = '1'
+Write-PanderuuStep "Backend real v1 en http://localhost:$Port"
 Invoke-PanderuuChecked -FilePath 'node' -Arguments @('--no-warnings=ExperimentalWarning', 'backend/server.mjs') -WorkingDirectory $root

@@ -7,13 +7,17 @@ import {
   INITIAL_LOAN_LIMIT_CENTS,
   addCashIncome,
   administrators,
+  authenticateSession,
   cashBalanceCents,
+  changePassword,
   closeCash,
   createAdmin,
   createLoan,
   createPerson,
   dailyMoraCents,
   dashboard,
+  login,
+  logoutSession,
   loanDueBalanceCents,
   people,
   peopleByRole,
@@ -22,6 +26,7 @@ import {
   refreshQuotaStatuses,
   registerPayment
 } from './domain.mjs';
+import { DEFAULT_TEMPORARY_PASSWORD, verifyPassword } from './auth.mjs';
 import { seedState } from './storage.mjs';
 import { loadSqliteState, withSqliteStateTransaction } from './sqlite-storage.mjs';
 
@@ -34,6 +39,30 @@ assert.equal(BASE_RATE_PERCENT, 5);
 assert.equal(DAILY_MORA_RATE, 0.001);
 assert.equal(INITIAL_LOAN_LIMIT_CENTS, 15000);
 assert.equal(cashBalanceCents(state), 180000);
+assert.equal(admin3.username, 'admin.seed');
+assert.ok(verifyPassword(DEFAULT_TEMPORARY_PASSWORD, admin3.passwordHash));
+
+assert.throws(() => login(state, { username: 'admin.seed', password: 'clave-incorrecta' }), /Credenciales invalidas/);
+const loginResult = login(state, { username: 'admin.seed', password: DEFAULT_TEMPORARY_PASSWORD });
+assert.equal(loginResult.actor.id, 'admin-seed');
+assert.equal(loginResult.actor.adminLevel, 3);
+assert.equal(loginResult.mustChangePassword, true);
+assert.ok(loginResult.token.length > 30);
+
+const authenticated = authenticateSession(state, loginResult.token);
+assert.equal(authenticated.actor.id, 'admin-seed');
+assert.equal(authenticated.session.actorId, 'admin-seed');
+
+const changedPassword = changePassword(state, authenticated.actor, authenticated.session, {
+  currentPassword: DEFAULT_TEMPORARY_PASSWORD,
+  newPassword: 'PanderuuNueva123!'
+});
+assert.equal(changedPassword.actor.mustChangePassword, false);
+assert.equal(verifyPassword('PanderuuNueva123!', admin3.passwordHash), true);
+
+const logout = logoutSession(state, authenticated.actor, authenticated.session);
+assert.equal(logout.loggedOut, true);
+assert.throws(() => authenticateSession(state, loginResult.token), /Sesion invalida/);
 
 assert.throws(
   () =>
@@ -290,6 +319,16 @@ try {
   const sqliteSeed = loadSqliteState(sqlitePath);
   assert.equal(cashBalanceCents(sqliteSeed), 180000);
   assert.equal(sqliteSeed.people.length, 2);
+  assert.equal(sqliteSeed.actors.find((item) => item.id === 'admin-seed').username, 'admin.seed');
+
+  const persistedLogin = withSqliteStateTransaction(sqlitePath, (txState) => {
+    return login(txState, { username: 'admin.seed', password: DEFAULT_TEMPORARY_PASSWORD });
+  });
+
+  const stateAfterLogin = loadSqliteState(sqlitePath);
+  const persistedAuth = authenticateSession(stateAfterLogin, persistedLogin.token);
+  assert.equal(persistedAuth.actor.id, 'admin-seed');
+  assert.ok(stateAfterLogin.sessions.some((item) => item.id === persistedAuth.session.id && item.tokenHash !== persistedLogin.token));
 
   const persistedPerson = withSqliteStateTransaction(sqlitePath, (txState) => {
     const actor = txState.actors.find((item) => item.id === 'admin-caja');

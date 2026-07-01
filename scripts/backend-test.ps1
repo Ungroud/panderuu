@@ -9,6 +9,6 @@ if (-not (Test-PanderuuCommand 'node')) {
   exit 1
 }
 
-Write-PanderuuStep 'Pruebas del backend real v0'
+Write-PanderuuStep 'Pruebas del backend real v1'
 Invoke-PanderuuChecked -FilePath 'node' -Arguments @('--no-warnings=ExperimentalWarning', 'backend/test.mjs') -WorkingDirectory $root
 Write-PanderuuOk 'Backend probado'
