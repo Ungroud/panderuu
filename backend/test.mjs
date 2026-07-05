@@ -9,6 +9,7 @@ import {
   administrators,
   authenticateSession,
   cashBalanceCents,
+  cashReport,
   changePassword,
   closeCash,
   createAdmin,
@@ -230,10 +231,19 @@ const { applications, payment, receipt } = registerPayment(state, admin2, {
   installmentsClosed: 1
 });
 assert.equal(payment.amountCents, 15750);
+assert.equal(payment.capitalCents, 15000);
+assert.equal(payment.interestCents, 750);
+assert.equal(payment.moraCents, 0);
 assert.equal(payment.installmentsClosed, 1);
 assert.equal(applications.length, 1);
+assert.equal(applications[0].capitalCents, 15000);
+assert.equal(applications[0].interestCents, 750);
+assert.equal(applications[0].moraCents, 0);
 assert.equal(receipt.balanceCents, 0);
-assert.equal(state.quotas.find((quota) => quota.loanId === loan.id).status, 'pagada');
+const paidQuota = state.quotas.find((quota) => quota.loanId === loan.id);
+assert.equal(paidQuota.status, 'pagada');
+assert.equal(paidQuota.capitalPaidCents, 15000);
+assert.equal(paidQuota.interestPaidCents, 750);
 assert.equal(cashBalanceCents(state), 180750);
 
 const multiLoan = createLoan(state, admin2, {
@@ -260,6 +270,9 @@ const multiPayment = registerPayment(state, admin2, {
   paymentDate: '2026-08-15'
 });
 assert.equal(multiPayment.payment.installmentsClosed, 2);
+assert.equal(multiPayment.payment.capitalCents, 10000);
+assert.equal(multiPayment.payment.interestCents, 500);
+assert.equal(multiPayment.payment.moraCents, 0);
 assert.equal(multiPayment.applications.length, 2);
 assert.equal(multiPayment.loan.status, 'activo');
 assert.equal(quotaBalanceCents(multiQuotas[0]), 0);
@@ -293,6 +306,9 @@ const moraPayment = registerPayment(moraState, moraAdmin, {
   paymentDate: '2026-02-04'
 });
 assert.equal(moraPayment.payment.amountCents, 105300);
+assert.equal(moraPayment.payment.capitalCents, 100000);
+assert.equal(moraPayment.payment.interestCents, 5000);
+assert.equal(moraPayment.payment.moraCents, 300);
 assert.equal(moraPayment.receipt.moraCents, 300);
 assert.equal(moraPayment.receipt.balanceCents, 0);
 assert.equal(moraPayment.loan.status, 'pagado');
@@ -309,7 +325,20 @@ assert.equal(close.differenceCents, 0);
 const summary = dashboard(state);
 assert.equal(summary.receiptCount, 2);
 assert.equal(summary.quotaCount, 4);
+assert.equal(summary.capitalRecoveredCents, 25000);
+assert.equal(summary.interestCollectedCents, 1250);
+assert.equal(summary.moraCollectedCents, 0);
 assert.ok(state.auditEvents.length >= 5);
+
+const report = cashReport(state, { fromDate: '2026-01-01', toDate: '2026-12-31' });
+assert.equal(report.entriesCents, 216250);
+assert.equal(report.exitsCents, 30000);
+assert.equal(report.expectedBalanceCents, cashBalanceCents(state));
+assert.equal(report.loanDisbursementsCents, 30000);
+assert.equal(report.paymentsReceivedCents, 26250);
+assert.equal(report.capitalRecoveredCents, 25000);
+assert.equal(report.interestCollectedCents, 1250);
+assert.equal(report.moraCollectedCents, 0);
 
 const testDir = join('.data', 'test', `backend-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`);
 const sqlitePath = join(testDir, 'panderuu.db');
@@ -398,6 +427,24 @@ try {
   assert.ok(stateAfterLoan.loans.some((item) => item.id === persistedLoan.id));
   assert.ok(stateAfterLoan.quotas.some((item) => item.loanId === persistedLoan.id));
   assert.equal(cashBalanceCents(stateAfterLoan), balanceBeforeRollback - 15000);
+
+  const persistedPayment = withSqliteStateTransaction(sqlitePath, (txState) => {
+    const actor = txState.actors.find((item) => item.id === 'admin-caja');
+    return registerPayment(txState, actor, {
+      loanId: persistedLoan.id,
+      amountCents: 15750
+    });
+  });
+  assert.equal(persistedPayment.payment.capitalCents, 15000);
+  assert.equal(persistedPayment.payment.interestCents, 750);
+
+  const stateAfterPersistedPayment = loadSqliteState(sqlitePath);
+  const savedPayment = stateAfterPersistedPayment.payments.find((item) => item.id === persistedPayment.payment.id);
+  const savedApplication = stateAfterPersistedPayment.paymentApplications.find((item) => item.paymentId === persistedPayment.payment.id);
+  assert.equal(savedPayment.capitalCents, 15000);
+  assert.equal(savedPayment.interestCents, 750);
+  assert.equal(savedApplication.capitalCents, 15000);
+  assert.equal(savedApplication.interestCents, 750);
 } finally {
   rmSync(testDir, { recursive: true, force: true });
 }

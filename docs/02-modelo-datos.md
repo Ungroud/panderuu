@@ -207,6 +207,9 @@ auditoria.ver
 | mora_centimos | integer | Mora si aplica. |
 | total_centimos | integer | Total de cuota. |
 | pagado_centimos | integer | Acumulado pagado. |
+| capital_pagado_centimos | integer | Capital cobrado en la cuota. |
+| interes_pagado_centimos | integer | Interes cobrado en la cuota. |
+| mora_pagada_centimos | integer | Mora cobrada en la cuota. |
 | estado | enum | pendiente, prioritaria, parcial, pagada, vencida, anulada. |
 
 En backend v1 esta entidad vive en:
@@ -228,6 +231,9 @@ Campos actuales:
 | mora_cents | integer | Mora acumulada segun dias completos de atraso. |
 | total_cents | integer | Total de cuota. |
 | paid_cents | integer | Pagado acumulado. |
+| capital_paid_cents | integer | Capital pagado acumulado. |
+| interest_paid_cents | integer | Interes pagado acumulado. |
+| mora_paid_cents | integer | Mora pagada acumulada. |
 | status | text | Estado de cuota. |
 | created_at | text | Fecha de creacion. |
 
@@ -251,6 +257,18 @@ payment_applications
 ```
 
 Cada registro indica pago, prestamo, cuota, monto aplicado y si esa cuota quedo cerrada.
+
+En backend v1, cada aplicacion tambien guarda:
+
+- `capital_cents`.
+- `interest_cents`.
+- `mora_cents`.
+
+El orden contable aplicado es:
+
+```text
+mora -> interes -> capital
+```
 
 La mora se refleja en:
 

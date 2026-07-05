@@ -62,6 +62,7 @@ export function loanBalanceCents(loan) {
 }
 
 export function quotaBalanceCents(quota) {
+  ensureQuotaPaymentComponents(quota);
   return Math.max(quota.totalCents - quota.paidCents, 0);
 }
 
@@ -447,6 +448,9 @@ export function registerPayment(state, actor, payload) {
   const amountCents = Math.min(payload.amountCents, dueBeforePayment);
   const applications = applyPaymentToQuotas(state, loan, amountCents);
   const installmentsClosed = applications.filter((application) => application.closedQuota).length;
+  const capitalCents = applications.reduce((sum, application) => sum + Number(application.capitalCents || 0), 0);
+  const interestCents = applications.reduce((sum, application) => sum + Number(application.interestCents || 0), 0);
+  const moraCents = applications.reduce((sum, application) => sum + Number(application.moraCents || 0), 0);
   loan.paidCents += amountCents;
   if (loanDueBalanceCents(state, loan) <= 0) {
     loan.status = 'pagado';
@@ -467,6 +471,9 @@ export function registerPayment(state, actor, payload) {
     personId: loan.personId,
     personName: loan.personName,
     amountCents,
+    capitalCents,
+    interestCents,
+    moraCents,
     installmentsClosed,
     createdBy: actor.id,
     createdAt: nowIso()
@@ -494,9 +501,18 @@ export function registerPayment(state, actor, payload) {
   const receipt = createReceipt(state, actor, loan, payment);
   createAudit(state, actor, 'pagos.registrar', 'pagos', payment.id, 'ok', {
     amountCents,
+    capitalCents,
+    interestCents,
+    moraCents,
     installmentsClosed,
     receiptId: receipt.id,
-    applications: applications.map((application) => ({ quotaId: application.quotaId, amountCents: application.amountCents }))
+    applications: applications.map((application) => ({
+      quotaId: application.quotaId,
+      amountCents: application.amountCents,
+      capitalCents: application.capitalCents,
+      interestCents: application.interestCents,
+      moraCents: application.moraCents
+    }))
   });
   return { payment, receipt, loan, applications };
 }
@@ -544,6 +560,56 @@ export function closeCash(state, actor, payload) {
   return close;
 }
 
+export function cashReport(state, options = {}) {
+  ensureStateCollections(state);
+  const fromDate = options.fromDate ? normalizeDate(options.fromDate) : todayDate();
+  const toDate = options.toDate ? normalizeDate(options.toDate) : fromDate;
+  if (fromDate > toDate) throw validation('La fecha inicial no puede ser mayor a la fecha final');
+
+  const beforeRange = state.cashMovements.filter((movement) => movementDate(movement.at) < fromDate);
+  const movements = state.cashMovements.filter((movement) => {
+    const date = movementDate(movement.at);
+    return date >= fromDate && date <= toDate;
+  });
+  const payments = state.payments.filter((payment) => {
+    const date = movementDate(payment.createdAt);
+    return date >= fromDate && date <= toDate;
+  });
+  const loans = state.loans.filter((loan) => {
+    const date = movementDate(loan.createdAt);
+    return date >= fromDate && date <= toDate;
+  });
+
+  const openingBalanceCents = balanceFromMovements(beforeRange);
+  const entriesCents = movements
+    .filter((movement) => movement.direction === 'entrada')
+    .reduce((sum, movement) => sum + movement.amountCents, 0);
+  const exitsCents = movements
+    .filter((movement) => movement.direction === 'salida')
+    .reduce((sum, movement) => sum + movement.amountCents, 0);
+
+  return {
+    range: { fromDate, toDate },
+    openingBalanceCents,
+    entriesCents,
+    exitsCents,
+    expectedBalanceCents: openingBalanceCents + entriesCents - exitsCents,
+    loanDisbursementsCents: movements
+      .filter((movement) => movement.type === 'prestamo')
+      .reduce((sum, movement) => sum + movement.amountCents, 0),
+    manualIncomeCents: movements
+      .filter((movement) => movement.type === 'ingreso')
+      .reduce((sum, movement) => sum + movement.amountCents, 0),
+    paymentsReceivedCents: payments.reduce((sum, payment) => sum + payment.amountCents, 0),
+    capitalRecoveredCents: payments.reduce((sum, payment) => sum + Number(payment.capitalCents || 0), 0),
+    interestCollectedCents: payments.reduce((sum, payment) => sum + Number(payment.interestCents || 0), 0),
+    moraCollectedCents: payments.reduce((sum, payment) => sum + Number(payment.moraCents || 0), 0),
+    loanCount: loans.length,
+    paymentCount: payments.length,
+    movementCount: movements.length
+  };
+}
+
 export function dashboard(state) {
   ensureStateCollections(state);
   refreshQuotaStatuses(state);
@@ -552,6 +618,9 @@ export function dashboard(state) {
     activeLoanBalanceCents: state.loans.reduce((sum, loan) => sum + loanDueBalanceCents(state, loan), 0),
     interestGeneratedCents: state.loans.reduce((sum, loan) => sum + loan.interestCents, 0),
     moraGeneratedCents: state.loans.reduce((sum, loan) => sum + loanMoraCents(state, loan), 0),
+    capitalRecoveredCents: state.payments.reduce((sum, payment) => sum + Number(payment.capitalCents || 0), 0),
+    interestCollectedCents: state.payments.reduce((sum, payment) => sum + Number(payment.interestCents || 0), 0),
+    moraCollectedCents: state.payments.reduce((sum, payment) => sum + Number(payment.moraCents || 0), 0),
     priorityPayments: state.quotas.filter((quota) => quota.status === 'vencida' || quota.status === 'prioritaria').length,
     quotaCount: state.quotas.length,
     peopleCount: state.people.length,
@@ -566,6 +635,7 @@ export function refreshQuotaStatuses(state, referenceDate = todayDate()) {
   const loansById = new Map(state.loans.map((loan) => [loan.id, loan]));
   const peopleById = new Map(state.people.map((person) => [person.id, person]));
   for (const quota of state.quotas) {
+    ensureQuotaPaymentComponents(quota);
     if (quota.status === 'anulada') continue;
     const loan = loansById.get(quota.loanId);
     const baseTotalCents = quota.capitalCents + quota.interestCents;
@@ -647,6 +717,31 @@ function ensureStateCollections(state) {
     actor.createdBy ||= 'system';
     actor.createdAt ||= '';
   }
+}
+
+function ensureQuotaPaymentComponents(quota) {
+  quota.capitalPaidCents = Number(quota.capitalPaidCents || 0);
+  quota.interestPaidCents = Number(quota.interestPaidCents || 0);
+  quota.moraPaidCents = Number(quota.moraPaidCents || 0);
+  quota.paidCents = Number(quota.paidCents || 0);
+
+  const componentPaid = quota.capitalPaidCents + quota.interestPaidCents + quota.moraPaidCents;
+  if (quota.paidCents > componentPaid) {
+    const missing = quota.paidCents - componentPaid;
+    applyPaymentSplitToQuota(quota, missing);
+  } else if (componentPaid > quota.paidCents) {
+    quota.paidCents = componentPaid;
+  }
+}
+
+function balanceFromMovements(movements) {
+  return movements.reduce((total, movement) => {
+    return movement.direction === 'entrada' ? total + movement.amountCents : total - movement.amountCents;
+  }, 0);
+}
+
+function movementDate(value) {
+  return normalizeDate(value);
 }
 
 function safeNormalizeLoginUsername(username) {
@@ -744,6 +839,9 @@ function createLoanQuotas(loan, installmentCount, loanDate) {
       moraCents: 0,
       totalCents: capitalCents + interestCents,
       paidCents: 0,
+      capitalPaidCents: 0,
+      interestPaidCents: 0,
+      moraPaidCents: 0,
       status: 'pendiente',
       createdAt: loan.createdAt
     };
@@ -759,8 +857,10 @@ function applyPaymentToQuotas(state, loan, amountCents) {
 
   for (const quota of quotas) {
     if (remaining <= 0) break;
+    ensureQuotaPaymentComponents(quota);
     const before = quota.paidCents;
     const applied = Math.min(remaining, quotaBalanceCents(quota));
+    const split = applyPaymentSplitToQuota(quota, applied);
     quota.paidCents += applied;
     remaining -= applied;
     refreshSingleQuotaStatus(quota);
@@ -770,6 +870,9 @@ function applyPaymentToQuotas(state, loan, amountCents) {
       quotaId: quota.id,
       quotaNumber: quota.number,
       amountCents: applied,
+      capitalCents: split.capitalCents,
+      interestCents: split.interestCents,
+      moraCents: split.moraCents,
       closedQuota: before < quota.totalCents && quota.paidCents >= quota.totalCents
     });
   }
@@ -781,11 +884,34 @@ function applyPaymentToQuotas(state, loan, amountCents) {
       quotaId: null,
       quotaNumber: 0,
       amountCents,
+      capitalCents: 0,
+      interestCents: 0,
+      moraCents: 0,
       closedQuota: loan.paidCents + amountCents >= loan.totalCents
     });
   }
 
   return applications;
+}
+
+function applyPaymentSplitToQuota(quota, amountCents) {
+  let remaining = amountCents;
+  const moraCents = applyToComponent(quota, 'moraPaidCents', quota.moraCents, remaining);
+  remaining -= moraCents;
+  const interestCents = applyToComponent(quota, 'interestPaidCents', quota.interestCents, remaining);
+  remaining -= interestCents;
+  const capitalCents = applyToComponent(quota, 'capitalPaidCents', quota.capitalCents, remaining);
+
+  return { capitalCents, interestCents, moraCents };
+}
+
+function applyToComponent(quota, paidField, totalCents, amountCents) {
+  if (amountCents <= 0) return 0;
+  const alreadyPaid = Number(quota[paidField] || 0);
+  const balance = Math.max(Number(totalCents || 0) - alreadyPaid, 0);
+  const applied = Math.min(amountCents, balance);
+  quota[paidField] = alreadyPaid + applied;
+  return applied;
 }
 
 function refreshSingleQuotaStatus(quota) {

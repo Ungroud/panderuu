@@ -5,6 +5,7 @@ import {
   addCashIncome,
   administrators,
   authenticateSession,
+  cashReport,
   changePassword,
   closeCash,
   createAudit,
@@ -69,6 +70,12 @@ const routes = [
   route('POST', '/auth/change-password', ({ state, actor, session, payload }) => changePassword(state, actor, session, payload)),
   route('GET', '/auth/me', ({ actor }) => ({ actor: publicActor(actor) })),
   route('GET', '/dashboard', ({ state }) => dashboard(state)),
+  route('GET', '/cash/report', ({ state, url }) =>
+    cashReport(state, {
+      fromDate: url.searchParams.get('from'),
+      toDate: url.searchParams.get('to')
+    })
+  ),
   route('GET', '/admins', ({ state }) => administrators(state)),
   route('GET', '/people', ({ state }) => people(state)),
   route('GET', '/people/profile', ({ state, url }) => personProfile(state, url.searchParams.get('id'))),

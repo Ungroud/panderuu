@@ -98,6 +98,8 @@ Pagos:
 Solo administrador nivel 2 o superior puede registrar pagos.
 El pago debe ser positivo.
 No se puede pagar un prestamo anulado.
+Cada pago guarda desglose contable: capital, interes y mora.
+El orden de aplicacion es mora -> interes -> capital.
 El pago genera entrada de caja.
 El pago genera boleta interna con correlativo.
 Si el pago completa el total, el prestamo queda pagado.
@@ -167,6 +169,7 @@ Endpoints:
 | POST | `/auth/change-password` | Cambia clave del administrador autenticado. |
 | POST | `/auth/logout` | Revoca la sesion actual. |
 | GET | `/dashboard` | Devuelve resumen de caja, prestamos, pagos y boletas. |
+| GET | `/cash/report?from=YYYY-MM-DD&to=YYYY-MM-DD` | Devuelve reporte de caja por rango con capital, interes y mora cobrados. |
 | GET | `/admins` | Devuelve administradores y persona vinculada cuando existe. |
 | GET | `/people` | Devuelve todas las personas registradas. |
 | GET | `/people/profile?id=...` | Devuelve perfil con prestamos, cuotas, pagos y boletas. |

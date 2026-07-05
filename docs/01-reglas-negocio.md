@@ -205,6 +205,8 @@ Reglas:
 - Puede ser parcial.
 - Se aplica desde la cuota pendiente mas antigua del prestamo.
 - Puede cubrir capital, interes y mora acumulada.
+- La aplicacion contable del pago se registra separando capital, interes y mora.
+- El orden de aplicacion es: mora, luego interes, luego capital.
 - Actualiza caja.
 - Genera movimiento de caja.
 - Puede generar boleta.
