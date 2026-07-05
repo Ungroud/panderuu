@@ -19,6 +19,9 @@ import {
   peopleByRole,
   personProfile,
   publicActor,
+  receiptPreview,
+  receipts,
+  recordReceiptPrint,
   refreshQuotaStatuses,
   registerPayment,
   reversePayment,
@@ -81,6 +84,8 @@ const routes = [
   route('GET', '/admins', ({ state }) => administrators(state)),
   route('GET', '/people', ({ state }) => people(state)),
   route('GET', '/people/profile', ({ state, url }) => personProfile(state, url.searchParams.get('id'))),
+  route('GET', '/receipts', ({ state }) => receipts(state)),
+  route('GET', '/receipts/preview', ({ state, url }) => receiptPreview(state, url.searchParams.get('id'))),
   route('GET', '/borrowers', ({ state }) => peopleByRole(state, 'Prestamista')),
   route('GET', '/associates', ({ state }) => peopleByRole(state, 'Asociado')),
   route('GET', '/state', ({ state }) => {
@@ -94,6 +99,7 @@ const routes = [
   route('POST', '/loans/void', ({ state, actor, payload }) => voidLoan(state, actor, payload)),
   route('POST', '/payments', ({ state, actor, payload }) => registerPayment(state, actor, payload)),
   route('POST', '/payments/reverse', ({ state, actor, payload }) => reversePayment(state, actor, payload)),
+  route('POST', '/receipts/print', ({ state, actor, payload }) => recordReceiptPrint(state, actor, payload)),
   route('POST', '/cash/income', ({ state, actor, payload }) => addCashIncome(state, actor, payload)),
   route('POST', '/cash/close', ({ state, actor, payload }) => closeCash(state, actor, payload))
 ];

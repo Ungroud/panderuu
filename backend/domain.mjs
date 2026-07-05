@@ -368,6 +368,81 @@ export function personProfile(state, personId) {
   };
 }
 
+export function receipts(state) {
+  ensureStateCollections(state);
+  return state.receipts;
+}
+
+export function receiptPreview(state, receiptId) {
+  ensureStateCollections(state);
+  const receipt = state.receipts.find((item) => item.id === receiptId || item.number === receiptId);
+  if (!receipt) throw validation('Boleta no encontrada');
+  const loan = state.loans.find((item) => item.id === receipt.loanId) || null;
+  const payment = state.payments.find((item) => item.id === receipt.paymentId) || null;
+  const person = loan ? state.people.find((item) => item.id === loan.personId) || null : null;
+  const printCount = state.receiptPrints.filter((print) => print.receiptId === receipt.id).length;
+
+  const columns = ['Nombre y Apellidos', 'Prestamo', 'Interes', 'Interes - Generado', 'Mora', 'Cuotas cerradas', 'Total pagado', 'Saldo'];
+  const row = [
+    receipt.personName,
+    receipt.capitalCents,
+    `${receipt.ratePercent}%`,
+    receipt.interestCents,
+    receipt.moraCents,
+    receipt.installmentsClosed,
+    payment?.amountCents || receipt.paidCents,
+    receipt.balanceCents
+  ];
+
+  return {
+    receipt,
+    loan,
+    payment,
+    person,
+    printCount,
+    format: 'boleta-horizontal',
+    table: { columns, rows: [row] },
+    summary: {
+      number: receipt.number,
+      issuedAt: receipt.issuedAt,
+      status: receipt.status,
+      paymentStatus: payment?.status || 'activo',
+      totalCents: receipt.totalCents,
+      paidCents: payment?.amountCents || receipt.paidCents,
+      balanceCents: receipt.balanceCents
+    },
+    signatures: ['Administrador', 'Prestamista']
+  };
+}
+
+export function recordReceiptPrint(state, actor, payload) {
+  ensureStateCollections(state);
+  requireAdminLevel(actor, 1, 'boletas.imprimir');
+  const preview = receiptPreview(state, payload.receiptId);
+  const previousPrints = state.receiptPrints.filter((print) => print.receiptId === preview.receipt.id);
+  const printType = previousPrints.length > 0 ? 'reimpresion' : 'impresion';
+  if (printType === 'reimpresion' && !payload.reason?.trim()) throw validation('La reimpresion requiere motivo');
+
+  const print = {
+    id: id('receipt-print'),
+    receiptId: preview.receipt.id,
+    receiptNumber: preview.receipt.number,
+    printType,
+    printedBy: actor.id,
+    printedAt: nowIso(),
+    reason: payload.reason?.trim() || 'Primera impresion',
+    previewJson: preview
+  };
+
+  state.receiptPrints.unshift(print);
+  createAudit(state, actor, 'boletas.imprimir', 'boletas', preview.receipt.id, 'ok', {
+    receiptNumber: preview.receipt.number,
+    printType,
+    reason: print.reason
+  });
+  return { print, preview };
+}
+
 export function createLoan(state, actor, payload) {
   ensureStateCollections(state);
   requireAdminLevel(actor, 2, 'prestamos.crear');
@@ -818,6 +893,7 @@ function ensureStateCollections(state) {
   state.cashMovements ||= [];
   state.cashClosures ||= [];
   state.receipts ||= [];
+  state.receiptPrints ||= [];
   state.auditEvents ||= [];
   state.quotas ||= [];
   state.paymentApplications ||= [];

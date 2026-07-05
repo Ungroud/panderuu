@@ -7,7 +7,7 @@ export const defaultPath = '.data/backend/panderuu.json';
 export function seedState() {
   const createdAt = new Date().toISOString();
   return {
-    version: 8,
+    version: 9,
     actors: [
       seedActor('admin-seed', 'Admin Semilla', 3, 'admin.seed', true, createdAt),
       seedActor('admin-caja', 'Caja Nivel 2', 2, 'caja.nivel2', false, createdAt),
@@ -64,6 +64,7 @@ export function seedState() {
     ],
     cashClosures: [],
     receipts: [],
+    receiptPrints: [],
     auditEvents: [],
     sessions: []
   };

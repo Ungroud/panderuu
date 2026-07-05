@@ -23,6 +23,9 @@ import {
   people,
   peopleByRole,
   personProfile,
+  receiptPreview,
+  receipts,
+  recordReceiptPrint,
   quotaBalanceCents,
   refreshQuotaStatuses,
   registerPayment,
@@ -247,6 +250,19 @@ assert.equal(paidQuota.status, 'pagada');
 assert.equal(paidQuota.capitalPaidCents, 15000);
 assert.equal(paidQuota.interestPaidCents, 750);
 assert.equal(cashBalanceCents(state), 180750);
+assert.ok(receipts(state).some((item) => item.id === receipt.id));
+
+const preview = receiptPreview(state, receipt.id);
+assert.equal(preview.summary.number, receipt.number);
+assert.equal(preview.table.columns[0], 'Nombre y Apellidos');
+assert.equal(preview.table.rows[0][1], 15000);
+
+const printed = recordReceiptPrint(state, admin1, { receiptId: receipt.id });
+assert.equal(printed.print.printType, 'impresion');
+assert.equal(printed.print.receiptNumber, receipt.number);
+assert.throws(() => recordReceiptPrint(state, admin1, { receiptId: receipt.id }), /reimpresion requiere motivo/);
+const reprinted = recordReceiptPrint(state, admin1, { receiptId: receipt.id, reason: 'Cliente solicito copia' });
+assert.equal(reprinted.print.printType, 'reimpresion');
 
 const multiLoan = createLoan(state, admin2, {
   personId: person.id,
@@ -486,6 +502,17 @@ try {
   assert.equal(savedPayment.interestCents, 750);
   assert.equal(savedApplication.capitalCents, 15000);
   assert.equal(savedApplication.interestCents, 750);
+
+  const persistedPrint = withSqliteStateTransaction(sqlitePath, (txState) => {
+    const actor = txState.actors.find((item) => item.id === 'admin-reportes');
+    return recordReceiptPrint(txState, actor, {
+      receiptId: persistedPayment.receipt.id
+    });
+  });
+  assert.equal(persistedPrint.print.printType, 'impresion');
+
+  const stateAfterPrint = loadSqliteState(sqlitePath);
+  assert.ok(stateAfterPrint.receiptPrints.some((item) => item.id === persistedPrint.print.id));
 
   const persistedReverse = withSqliteStateTransaction(sqlitePath, (txState) => {
     const actor = txState.actors.find((item) => item.id === 'admin-caja');

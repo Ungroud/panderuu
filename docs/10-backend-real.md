@@ -145,6 +145,15 @@ El cambio de clave exige clave actual y revoca otras sesiones del mismo actor.
 Las claves temporales deben cambiarse antes de operar en produccion.
 ```
 
+Boletas:
+
+```text
+Las boletas tienen preview imprimible.
+La primera impresion queda registrada.
+Toda reimpresion exige motivo.
+El historial de impresion guarda snapshot del preview.
+```
+
 ## API local
 
 Servidor:
@@ -175,6 +184,8 @@ Endpoints:
 | GET | `/admins` | Devuelve administradores y persona vinculada cuando existe. |
 | GET | `/people` | Devuelve todas las personas registradas. |
 | GET | `/people/profile?id=...` | Devuelve perfil con prestamos, cuotas, pagos y boletas. |
+| GET | `/receipts` | Devuelve boletas registradas. |
+| GET | `/receipts/preview?id=...` | Devuelve preview imprimible de una boleta. |
 | GET | `/borrowers` | Devuelve personas con rol Prestamista. |
 | GET | `/associates` | Devuelve personas con rol Asociado. |
 | GET | `/state` | Devuelve el estado completo para depuracion local. |
@@ -185,6 +196,7 @@ Endpoints:
 | POST | `/loans/void` | Anula prestamo sin pagos activos y registra compensacion de caja. |
 | POST | `/payments` | Registra pagos, genera caja y boleta. |
 | POST | `/payments/reverse` | Reversa pago con motivo, reabre cuotas y registra salida de caja. |
+| POST | `/receipts/print` | Registra impresion o reimpresion de boleta. |
 | POST | `/cash/income` | Ingresa dinero justificado a caja. |
 | POST | `/cash/close` | Registra cierre/conteo de caja. |
 

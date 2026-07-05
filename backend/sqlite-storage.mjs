@@ -231,6 +231,22 @@ export const migrations = [
       ALTER TABLE loans ADD COLUMN voided_at TEXT NOT NULL DEFAULT '';
       ALTER TABLE loans ADD COLUMN void_reason TEXT NOT NULL DEFAULT '';
     `
+  },
+  {
+    version: 9,
+    name: '009_receipt_prints',
+    sql: `
+      CREATE TABLE IF NOT EXISTS receipt_prints (
+        id TEXT PRIMARY KEY,
+        receipt_id TEXT NOT NULL,
+        receipt_number TEXT NOT NULL,
+        print_type TEXT NOT NULL,
+        printed_by TEXT NOT NULL,
+        printed_at TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        preview_json TEXT NOT NULL
+      );
+    `
   }
 ];
 
@@ -384,7 +400,7 @@ export function migrationSummary(db) {
 
 export function readStateFromDb(db) {
   return {
-    version: 8,
+    version: 9,
     actors: db
       .prepare(
         `SELECT id, name, admin_level AS adminLevel, seed_admin AS seedAdmin,
@@ -502,6 +518,14 @@ export function readStateFromDb(db) {
       )
       .all()
       .map(toReceipt),
+    receiptPrints: db
+      .prepare(
+        `SELECT id, receipt_id AS receiptId, receipt_number AS receiptNumber, print_type AS printType,
+          printed_by AS printedBy, printed_at AS printedAt, reason, preview_json AS previewJson
+        FROM receipt_prints ORDER BY printed_at DESC, rowid DESC`
+      )
+      .all()
+      .map(toReceiptPrint),
     auditEvents: db
       .prepare(
         `SELECT id, at, actor_id AS actorId, actor_name AS actorName, admin_level AS adminLevel,
@@ -544,6 +568,7 @@ export function writeStateToDb(db, state) {
   db.exec(`
     DELETE FROM sessions;
     DELETE FROM audit_events;
+    DELETE FROM receipt_prints;
     DELETE FROM receipts;
     DELETE FROM cash_closures;
     DELETE FROM cash_movements;
@@ -770,6 +795,24 @@ export function writeStateToDb(db, state) {
     );
   }
 
+  const insertReceiptPrint = db.prepare(`
+    INSERT INTO receipt_prints (
+      id, receipt_id, receipt_number, print_type, printed_by, printed_at, reason, preview_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const print of state.receiptPrints || []) {
+    insertReceiptPrint.run(
+      print.id,
+      print.receiptId,
+      print.receiptNumber,
+      print.printType,
+      print.printedBy,
+      print.printedAt,
+      print.reason,
+      JSON.stringify(print.previewJson || {})
+    );
+  }
+
   const insertAudit = db.prepare(`
     INSERT INTO audit_events (
       id, at, actor_id, actor_name, admin_level, action, entity_type, entity_id, result, details_json
@@ -944,5 +987,18 @@ function toReceipt(receipt) {
     status: receipt.status,
     issuedBy: receipt.issuedBy,
     issuedAt: receipt.issuedAt
+  };
+}
+
+function toReceiptPrint(print) {
+  return {
+    id: print.id,
+    receiptId: print.receiptId,
+    receiptNumber: print.receiptNumber,
+    printType: print.printType,
+    printedBy: print.printedBy,
+    printedAt: print.printedAt,
+    reason: print.reason,
+    previewJson: parseJson(print.previewJson, {})
   };
 }

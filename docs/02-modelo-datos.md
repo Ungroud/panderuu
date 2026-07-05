@@ -140,6 +140,25 @@ sessions
 | revoked_at | text | Fecha de logout o revocacion. |
 | last_seen_at | text | Ultimo uso observado. |
 
+## Impresiones de boletas
+
+En backend v1 las impresiones viven en:
+
+```text
+receipt_prints
+```
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | text | Identificador de impresion. |
+| receipt_id | text | Boleta relacionada. |
+| receipt_number | text | Correlativo de boleta. |
+| print_type | text | `impresion` o `reimpresion`. |
+| printed_by | text | Administrador que imprimio. |
+| printed_at | text | Fecha de impresion. |
+| reason | text | Motivo; obligatorio en reimpresion. |
+| preview_json | text | Snapshot del preview usado para imprimir. |
+
 ## Roles y permisos
 
 Roles base:

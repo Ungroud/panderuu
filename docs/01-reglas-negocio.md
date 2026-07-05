@@ -261,6 +261,17 @@ Reglas:
 - Solo se puede anular un prestamo si no tiene pagos activos; si tiene pagos, primero deben reversarse.
 - La anulacion marca prestamo y cuotas como `anulado` y registra movimiento compensatorio de caja.
 
+## Boletas
+
+Reglas:
+
+- Todo pago puede generar boleta interna con correlativo.
+- Todo administrador nivel 1 o superior puede solicitar vista previa e impresion.
+- La primera impresion queda registrada sin motivo adicional.
+- Toda reimpresion exige motivo obligatorio.
+- El registro de impresion guarda administrador, fecha, tipo, motivo y snapshot de preview.
+- La boleta no se elimina aunque el pago sea reversado; debe quedar como evidencia historica.
+
 ## Cierre de caja
 
 El cierre es un conteo final, no reparto.
