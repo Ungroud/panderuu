@@ -191,6 +191,9 @@ auditoria.ver
 | fecha_prestamo | date | Fecha de solicitud/registro. |
 | fecha_desembolso | date | Fecha de entrega. |
 | estado | enum | Ciclo de vida del prestamo. |
+| anulado_por | uuid | Administrador que anulo. |
+| anulado_en | datetime | Fecha de anulacion. |
+| motivo_anulacion | text | Motivo obligatorio. |
 | criterio_admin | text | Motivo de excepcion. |
 | created_at | datetime | Registro. |
 
@@ -249,6 +252,15 @@ Campos actuales:
 - ajuste.
 
 Esto permite que un pago cierre varias cuotas y mantenga clasificacion contable.
+
+Campos de control de pago:
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| estado | enum | `activo`, `reversado`. |
+| reversado_por | uuid | Administrador que reverso. |
+| reversado_en | datetime | Fecha de reversa. |
+| motivo_reversa | text | Motivo obligatorio. |
 
 En backend v1, la aplicacion de pagos por cuota se guarda en:
 

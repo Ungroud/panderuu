@@ -90,6 +90,7 @@ La tasa permitida debe ser 2%, 5% o 10%.
 La tasa base documentada es 5%.
 No se puede desembolsar si la caja no tiene saldo suficiente.
 El desembolso genera salida de caja y auditoria.
+La anulacion de prestamo exige motivo y solo se permite sin pagos activos.
 ```
 
 Pagos:
@@ -103,6 +104,7 @@ El orden de aplicacion es mora -> interes -> capital.
 El pago genera entrada de caja.
 El pago genera boleta interna con correlativo.
 Si el pago completa el total, el prestamo queda pagado.
+La reversa de pago exige motivo, marca el pago como reversado y genera salida de caja.
 ```
 
 Cuotas:
@@ -180,7 +182,9 @@ Endpoints:
 | POST | `/admins` | Crea administradores; requiere nivel 3. |
 | POST | `/people` | Crea prestamistas/asociados. |
 | POST | `/loans` | Crea prestamos y descuenta caja. |
+| POST | `/loans/void` | Anula prestamo sin pagos activos y registra compensacion de caja. |
 | POST | `/payments` | Registra pagos, genera caja y boleta. |
+| POST | `/payments/reverse` | Reversa pago con motivo, reabre cuotas y registra salida de caja. |
 | POST | `/cash/income` | Ingresa dinero justificado a caja. |
 | POST | `/cash/close` | Registra cierre/conteo de caja. |
 

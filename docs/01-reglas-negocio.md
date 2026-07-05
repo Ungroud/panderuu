@@ -212,6 +212,8 @@ Reglas:
 - Puede generar boleta.
 - No se permiten pagos negativos.
 - No se permiten pagos en prestamos anulados.
+- Una reversa de pago exige motivo, no borra el pago y registra salida compensatoria de caja.
+- Un pago reversado deja de contar como capital/interes/mora cobrado vigente.
 
 Prioridad:
 
@@ -246,6 +248,18 @@ Todo movimiento exige:
 - Responsable.
 - Referencia.
 - Motivo si es manual o critico.
+
+## Anulaciones y reversas
+
+Reglas:
+
+- No se hace borrado fisico de prestamos ni pagos.
+- La reversa de pago requiere administrador nivel 2 o superior y motivo obligatorio.
+- La reversa marca el pago como `reversado`, resta sus aplicaciones de cuotas y registra salida de caja.
+- No se permite reversar dos veces el mismo pago.
+- La anulacion de prestamo requiere administrador nivel 2 o superior y motivo obligatorio.
+- Solo se puede anular un prestamo si no tiene pagos activos; si tiene pagos, primero deben reversarse.
+- La anulacion marca prestamo y cuotas como `anulado` y registra movimiento compensatorio de caja.
 
 ## Cierre de caja
 

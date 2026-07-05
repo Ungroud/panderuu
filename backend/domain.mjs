@@ -77,7 +77,8 @@ export function loanMoraCents(state, loan) {
 
 export function loanDueBalanceCents(state, loan) {
   ensureStateCollections(state);
-  const quotas = state.quotas.filter((quota) => quota.loanId === loan.id);
+  if (loan.status === 'anulado') return 0;
+  const quotas = state.quotas.filter((quota) => quota.loanId === loan.id && quota.status !== 'anulada');
   if (quotas.length === 0) return loanBalanceCents(loan);
   return quotas.reduce((sum, quota) => sum + quotaBalanceCents(quota), 0);
 }
@@ -400,6 +401,9 @@ export function createLoan(state, actor, payload) {
     months: payload.months,
     installments: installmentCount,
     status: person.creditStatus === 'evaluado' ? 'evaluado' : 'activo',
+    voidedBy: '',
+    voidedAt: '',
+    voidReason: '',
     createdBy: actor.id,
     createdAt: `${loanDate}T00:00:00.000Z`
   };
@@ -475,6 +479,10 @@ export function registerPayment(state, actor, payload) {
     interestCents,
     moraCents,
     installmentsClosed,
+    status: 'activo',
+    reversedBy: '',
+    reversedAt: '',
+    reversalReason: '',
     createdBy: actor.id,
     createdAt: nowIso()
   };
@@ -515,6 +523,103 @@ export function registerPayment(state, actor, payload) {
     }))
   });
   return { payment, receipt, loan, applications };
+}
+
+export function reversePayment(state, actor, payload) {
+  ensureStateCollections(state);
+  requireAdminLevel(actor, 2, 'pagos.reversar');
+  const payment = state.payments.find((item) => item.id === payload.paymentId);
+  if (!payment) throw validation('Pago no encontrado');
+  if (payment.status === 'reversado') throw validation('El pago ya fue reversado');
+  if (!payload.reason?.trim()) throw validation('La reversa de pago requiere motivo');
+
+  const loan = state.loans.find((item) => item.id === payment.loanId);
+  if (!loan) throw validation('Prestamo no encontrado para reversa');
+
+  const applications = state.paymentApplications.filter((application) => application.paymentId === payment.id);
+  for (const application of applications) {
+    reversePaymentApplication(state, application);
+  }
+
+  loan.paidCents = Math.max(Number(loan.paidCents || 0) - payment.amountCents, 0);
+  if (loan.status === 'pagado') loan.status = 'activo';
+  refreshQuotaStatuses(state);
+
+  payment.status = 'reversado';
+  payment.reversedBy = actor.id;
+  payment.reversedAt = nowIso();
+  payment.reversalReason = payload.reason.trim();
+
+  state.cashMovements.unshift({
+    id: id('cash'),
+    at: payment.reversedAt,
+    type: 'reversa_pago',
+    description: `Reversa pago ${payment.id}: ${payment.reversalReason}`,
+    amountCents: payment.amountCents,
+    direction: 'salida',
+    referenceType: 'reversa_pago',
+    referenceId: payment.id,
+    actorId: actor.id
+  });
+
+  createAudit(state, actor, 'pagos.reversar', 'pagos', payment.id, 'ok', {
+    loanId: loan.id,
+    amountCents: payment.amountCents,
+    capitalCents: payment.capitalCents,
+    interestCents: payment.interestCents,
+    moraCents: payment.moraCents,
+    reason: payment.reversalReason
+  });
+
+  return { payment, loan, applications };
+}
+
+export function voidLoan(state, actor, payload) {
+  ensureStateCollections(state);
+  requireAdminLevel(actor, 2, 'prestamos.anular');
+  const loan = state.loans.find((item) => item.id === payload.loanId);
+  if (!loan) throw validation('Prestamo no encontrado');
+  if (loan.status === 'anulado') throw validation('El prestamo ya esta anulado');
+  if (!payload.reason?.trim()) throw validation('La anulacion de prestamo requiere motivo');
+
+  const activePayments = state.payments.filter((payment) => payment.loanId === loan.id && payment.status !== 'reversado');
+  if (activePayments.length > 0) throw validation('No se puede anular un prestamo con pagos activos; primero reverse los pagos');
+
+  loan.status = 'anulado';
+  loan.voidedBy = actor.id;
+  loan.voidedAt = nowIso();
+  loan.voidReason = payload.reason.trim();
+  loan.paidCents = 0;
+
+  for (const quota of state.quotas.filter((item) => item.loanId === loan.id)) {
+    quota.status = 'anulada';
+    quota.paidCents = 0;
+    quota.capitalPaidCents = 0;
+    quota.interestPaidCents = 0;
+    quota.moraPaidCents = 0;
+  }
+
+  const person = state.people.find((item) => item.id === loan.personId);
+  if (person) person.loansCount = Math.max(Number(person.loansCount || 0) - 1, 0);
+
+  state.cashMovements.unshift({
+    id: id('cash'),
+    at: loan.voidedAt,
+    type: 'anulacion_prestamo',
+    description: `Anulacion prestamo ${loan.id}: ${loan.voidReason}`,
+    amountCents: loan.capitalCents,
+    direction: 'entrada',
+    referenceType: 'anulacion_prestamo',
+    referenceId: loan.id,
+    actorId: actor.id
+  });
+
+  createAudit(state, actor, 'prestamos.anular', 'prestamos', loan.id, 'ok', {
+    capitalCents: loan.capitalCents,
+    reason: loan.voidReason
+  });
+
+  return { loan };
 }
 
 export function addCashIncome(state, actor, payload) {
@@ -575,6 +680,7 @@ export function cashReport(state, options = {}) {
     const date = movementDate(payment.createdAt);
     return date >= fromDate && date <= toDate;
   });
+  const activePayments = payments.filter((payment) => payment.status !== 'reversado');
   const loans = state.loans.filter((loan) => {
     const date = movementDate(loan.createdAt);
     return date >= fromDate && date <= toDate;
@@ -597,13 +703,19 @@ export function cashReport(state, options = {}) {
     loanDisbursementsCents: movements
       .filter((movement) => movement.type === 'prestamo')
       .reduce((sum, movement) => sum + movement.amountCents, 0),
+    loanVoidsCents: movements
+      .filter((movement) => movement.type === 'anulacion_prestamo')
+      .reduce((sum, movement) => sum + movement.amountCents, 0),
     manualIncomeCents: movements
       .filter((movement) => movement.type === 'ingreso')
       .reduce((sum, movement) => sum + movement.amountCents, 0),
-    paymentsReceivedCents: payments.reduce((sum, payment) => sum + payment.amountCents, 0),
-    capitalRecoveredCents: payments.reduce((sum, payment) => sum + Number(payment.capitalCents || 0), 0),
-    interestCollectedCents: payments.reduce((sum, payment) => sum + Number(payment.interestCents || 0), 0),
-    moraCollectedCents: payments.reduce((sum, payment) => sum + Number(payment.moraCents || 0), 0),
+    paymentsReceivedCents: activePayments.reduce((sum, payment) => sum + payment.amountCents, 0),
+    paymentReversalsCents: movements
+      .filter((movement) => movement.type === 'reversa_pago')
+      .reduce((sum, movement) => sum + movement.amountCents, 0),
+    capitalRecoveredCents: activePayments.reduce((sum, payment) => sum + Number(payment.capitalCents || 0), 0),
+    interestCollectedCents: activePayments.reduce((sum, payment) => sum + Number(payment.interestCents || 0), 0),
+    moraCollectedCents: activePayments.reduce((sum, payment) => sum + Number(payment.moraCents || 0), 0),
     loanCount: loans.length,
     paymentCount: payments.length,
     movementCount: movements.length
@@ -613,14 +725,19 @@ export function cashReport(state, options = {}) {
 export function dashboard(state) {
   ensureStateCollections(state);
   refreshQuotaStatuses(state);
+  const activePayments = state.payments.filter((payment) => payment.status !== 'reversado');
   return {
     cashBalanceCents: cashBalanceCents(state),
     activeLoanBalanceCents: state.loans.reduce((sum, loan) => sum + loanDueBalanceCents(state, loan), 0),
-    interestGeneratedCents: state.loans.reduce((sum, loan) => sum + loan.interestCents, 0),
-    moraGeneratedCents: state.loans.reduce((sum, loan) => sum + loanMoraCents(state, loan), 0),
-    capitalRecoveredCents: state.payments.reduce((sum, payment) => sum + Number(payment.capitalCents || 0), 0),
-    interestCollectedCents: state.payments.reduce((sum, payment) => sum + Number(payment.interestCents || 0), 0),
-    moraCollectedCents: state.payments.reduce((sum, payment) => sum + Number(payment.moraCents || 0), 0),
+    interestGeneratedCents: state.loans
+      .filter((loan) => loan.status !== 'anulado')
+      .reduce((sum, loan) => sum + loan.interestCents, 0),
+    moraGeneratedCents: state.loans
+      .filter((loan) => loan.status !== 'anulado')
+      .reduce((sum, loan) => sum + loanMoraCents(state, loan), 0),
+    capitalRecoveredCents: activePayments.reduce((sum, payment) => sum + Number(payment.capitalCents || 0), 0),
+    interestCollectedCents: activePayments.reduce((sum, payment) => sum + Number(payment.interestCents || 0), 0),
+    moraCollectedCents: activePayments.reduce((sum, payment) => sum + Number(payment.moraCents || 0), 0),
     priorityPayments: state.quotas.filter((quota) => quota.status === 'vencida' || quota.status === 'prioritaria').length,
     quotaCount: state.quotas.length,
     peopleCount: state.people.length,
@@ -892,6 +1009,17 @@ function applyPaymentToQuotas(state, loan, amountCents) {
   }
 
   return applications;
+}
+
+function reversePaymentApplication(state, application) {
+  const quota = state.quotas.find((item) => item.id === application.quotaId);
+  if (!quota) return;
+  ensureQuotaPaymentComponents(quota);
+  quota.capitalPaidCents = Math.max(quota.capitalPaidCents - Number(application.capitalCents || 0), 0);
+  quota.interestPaidCents = Math.max(quota.interestPaidCents - Number(application.interestCents || 0), 0);
+  quota.moraPaidCents = Math.max(quota.moraPaidCents - Number(application.moraCents || 0), 0);
+  quota.paidCents = Math.max(quota.paidCents - Number(application.amountCents || 0), 0);
+  refreshSingleQuotaStatus(quota);
 }
 
 function applyPaymentSplitToQuota(quota, amountCents) {

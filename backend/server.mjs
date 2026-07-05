@@ -21,7 +21,9 @@ import {
   publicActor,
   refreshQuotaStatuses,
   registerPayment,
-  safeDebugState
+  reversePayment,
+  safeDebugState,
+  voidLoan
 } from './domain.mjs';
 import { defaultSqlitePath, loadSqliteState, withSqliteStateTransaction } from './sqlite-storage.mjs';
 
@@ -89,7 +91,9 @@ const routes = [
   route('POST', '/admins', ({ state, actor, payload }) => createAdmin(state, actor, payload)),
   route('POST', '/people', ({ state, actor, payload }) => createPerson(state, actor, payload)),
   route('POST', '/loans', ({ state, actor, payload }) => createLoan(state, actor, payload)),
+  route('POST', '/loans/void', ({ state, actor, payload }) => voidLoan(state, actor, payload)),
   route('POST', '/payments', ({ state, actor, payload }) => registerPayment(state, actor, payload)),
+  route('POST', '/payments/reverse', ({ state, actor, payload }) => reversePayment(state, actor, payload)),
   route('POST', '/cash/income', ({ state, actor, payload }) => addCashIncome(state, actor, payload)),
   route('POST', '/cash/close', ({ state, actor, payload }) => closeCash(state, actor, payload))
 ];

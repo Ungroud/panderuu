@@ -217,6 +217,20 @@ export const migrations = [
       ALTER TABLE loan_installments ADD COLUMN interest_paid_cents INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE loan_installments ADD COLUMN mora_paid_cents INTEGER NOT NULL DEFAULT 0;
     `
+  },
+  {
+    version: 8,
+    name: '008_reversals_voids',
+    sql: `
+      ALTER TABLE payments ADD COLUMN status TEXT NOT NULL DEFAULT 'activo';
+      ALTER TABLE payments ADD COLUMN reversed_by TEXT NOT NULL DEFAULT '';
+      ALTER TABLE payments ADD COLUMN reversed_at TEXT NOT NULL DEFAULT '';
+      ALTER TABLE payments ADD COLUMN reversal_reason TEXT NOT NULL DEFAULT '';
+
+      ALTER TABLE loans ADD COLUMN voided_by TEXT NOT NULL DEFAULT '';
+      ALTER TABLE loans ADD COLUMN voided_at TEXT NOT NULL DEFAULT '';
+      ALTER TABLE loans ADD COLUMN void_reason TEXT NOT NULL DEFAULT '';
+    `
   }
 ];
 
@@ -370,7 +384,7 @@ export function migrationSummary(db) {
 
 export function readStateFromDb(db) {
   return {
-    version: 7,
+    version: 8,
     actors: db
       .prepare(
         `SELECT id, name, admin_level AS adminLevel, seed_admin AS seedAdmin,
@@ -422,7 +436,9 @@ export function readStateFromDb(db) {
       .prepare(
         `SELECT id, person_id AS personId, person_name AS personName, capital_cents AS capitalCents,
           rate_percent AS ratePercent, interest_cents AS interestCents, total_cents AS totalCents,
-          paid_cents AS paidCents, months, installments, status, created_by AS createdBy, created_at AS createdAt
+          paid_cents AS paidCents, months, installments, status,
+          voided_by AS voidedBy, voided_at AS voidedAt, void_reason AS voidReason,
+          created_by AS createdBy, created_at AS createdAt
         FROM loans ORDER BY created_at DESC, rowid DESC`
       )
       .all()
@@ -443,7 +459,8 @@ export function readStateFromDb(db) {
         `SELECT id, loan_id AS loanId, person_id AS personId, person_name AS personName,
           amount_cents AS amountCents, capital_cents AS capitalCents,
           interest_cents AS interestCents, mora_cents AS moraCents,
-          installments_closed AS installmentsClosed,
+          installments_closed AS installmentsClosed, status, reversed_by AS reversedBy,
+          reversed_at AS reversedAt, reversal_reason AS reversalReason,
           created_by AS createdBy, created_at AS createdAt
         FROM payments ORDER BY created_at DESC, rowid DESC`
       )
@@ -590,8 +607,9 @@ export function writeStateToDb(db, state) {
   const insertLoan = db.prepare(`
     INSERT INTO loans (
       id, person_id, person_name, capital_cents, rate_percent, interest_cents, total_cents,
-      paid_cents, months, installments, status, created_by, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      paid_cents, months, installments, status, voided_by, voided_at, void_reason,
+      created_by, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const loan of state.loans) {
     insertLoan.run(
@@ -606,6 +624,9 @@ export function writeStateToDb(db, state) {
       Number(loan.months),
       Number(loan.installments),
       loan.status,
+      loan.voidedBy || '',
+      loan.voidedAt || '',
+      loan.voidReason || '',
       loan.createdBy,
       loan.createdAt
     );
@@ -640,8 +661,9 @@ export function writeStateToDb(db, state) {
   const insertPayment = db.prepare(`
     INSERT INTO payments (
       id, loan_id, person_id, person_name, amount_cents, capital_cents, interest_cents,
-      mora_cents, installments_closed, created_by, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      mora_cents, installments_closed, status, reversed_by, reversed_at, reversal_reason,
+      created_by, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const payment of state.payments) {
     insertPayment.run(
@@ -654,6 +676,10 @@ export function writeStateToDb(db, state) {
       Number(payment.interestCents || 0),
       Number(payment.moraCents || 0),
       Number(payment.installmentsClosed),
+      payment.status || 'activo',
+      payment.reversedBy || '',
+      payment.reversedAt || '',
+      payment.reversalReason || '',
       payment.createdBy,
       payment.createdAt
     );
@@ -811,6 +837,9 @@ function toLoan(loan) {
     months: Number(loan.months),
     installments: Number(loan.installments),
     status: loan.status,
+    voidedBy: loan.voidedBy || '',
+    voidedAt: loan.voidedAt || '',
+    voidReason: loan.voidReason || '',
     createdBy: loan.createdBy,
     createdAt: loan.createdAt
   };
@@ -827,6 +856,10 @@ function toPayment(payment) {
     interestCents: Number(payment.interestCents || 0),
     moraCents: Number(payment.moraCents || 0),
     installmentsClosed: Number(payment.installmentsClosed),
+    status: payment.status || 'activo',
+    reversedBy: payment.reversedBy || '',
+    reversedAt: payment.reversedAt || '',
+    reversalReason: payment.reversalReason || '',
     createdBy: payment.createdBy,
     createdAt: payment.createdAt
   };

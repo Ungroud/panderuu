@@ -25,7 +25,9 @@ import {
   personProfile,
   quotaBalanceCents,
   refreshQuotaStatuses,
-  registerPayment
+  registerPayment,
+  reversePayment,
+  voidLoan
 } from './domain.mjs';
 import { DEFAULT_TEMPORARY_PASSWORD, verifyPassword } from './auth.mjs';
 import { seedState } from './storage.mjs';
@@ -340,6 +342,45 @@ assert.equal(report.capitalRecoveredCents, 25000);
 assert.equal(report.interestCollectedCents, 1250);
 assert.equal(report.moraCollectedCents, 0);
 
+const reversalState = seedState();
+const reversalAdmin = reversalState.actors.find((actor) => actor.id === 'admin-caja');
+const reversalBorrower = reversalState.people.find((item) => item.id === 'person-demo-new');
+const reversalLoan = createLoan(reversalState, reversalAdmin, {
+  personId: reversalBorrower.id,
+  capitalCents: 15000,
+  ratePercent: 5,
+  months: 1,
+  installments: 1
+});
+const reversalPayment = registerPayment(reversalState, reversalAdmin, {
+  loanId: reversalLoan.id,
+  amountCents: 15750
+});
+assert.equal(reversalPayment.loan.status, 'pagado');
+assert.throws(() => voidLoan(reversalState, reversalAdmin, { loanId: reversalLoan.id, reason: 'No debe pasar' }), /pagos activos/);
+
+const reversed = reversePayment(reversalState, reversalAdmin, {
+  paymentId: reversalPayment.payment.id,
+  reason: 'Pago registrado por error'
+});
+assert.equal(reversed.payment.status, 'reversado');
+assert.equal(reversed.loan.paidCents, 0);
+assert.equal(reversalState.quotas.find((quota) => quota.loanId === reversalLoan.id).paidCents, 0);
+assert.equal(cashBalanceCents(reversalState), 165000);
+assert.throws(
+  () => reversePayment(reversalState, reversalAdmin, { paymentId: reversalPayment.payment.id, reason: 'Duplicado' }),
+  /ya fue reversado/
+);
+
+const voided = voidLoan(reversalState, reversalAdmin, {
+  loanId: reversalLoan.id,
+  reason: 'Prestamo creado por error'
+});
+assert.equal(voided.loan.status, 'anulado');
+assert.equal(loanDueBalanceCents(reversalState, voided.loan), 0);
+assert.equal(reversalState.quotas.find((quota) => quota.loanId === reversalLoan.id).status, 'anulada');
+assert.equal(cashBalanceCents(reversalState), 180000);
+
 const testDir = join('.data', 'test', `backend-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`);
 const sqlitePath = join(testDir, 'panderuu.db');
 mkdirSync(testDir, { recursive: true });
@@ -445,6 +486,32 @@ try {
   assert.equal(savedPayment.interestCents, 750);
   assert.equal(savedApplication.capitalCents, 15000);
   assert.equal(savedApplication.interestCents, 750);
+
+  const persistedReverse = withSqliteStateTransaction(sqlitePath, (txState) => {
+    const actor = txState.actors.find((item) => item.id === 'admin-caja');
+    return reversePayment(txState, actor, {
+      paymentId: persistedPayment.payment.id,
+      reason: 'Reversa SQLite'
+    });
+  });
+  assert.equal(persistedReverse.payment.status, 'reversado');
+
+  const stateAfterReverse = loadSqliteState(sqlitePath);
+  assert.equal(stateAfterReverse.payments.find((item) => item.id === persistedPayment.payment.id).status, 'reversado');
+  assert.equal(cashBalanceCents(stateAfterReverse), balanceBeforeRollback - 15000);
+
+  const persistedVoid = withSqliteStateTransaction(sqlitePath, (txState) => {
+    const actor = txState.actors.find((item) => item.id === 'admin-caja');
+    return voidLoan(txState, actor, {
+      loanId: persistedLoan.id,
+      reason: 'Anulacion SQLite'
+    });
+  });
+  assert.equal(persistedVoid.loan.status, 'anulado');
+
+  const stateAfterVoid = loadSqliteState(sqlitePath);
+  assert.equal(stateAfterVoid.loans.find((item) => item.id === persistedLoan.id).status, 'anulado');
+  assert.equal(cashBalanceCents(stateAfterVoid), balanceBeforeRollback);
 } finally {
   rmSync(testDir, { recursive: true, force: true });
 }
