@@ -24,8 +24,10 @@ import {
   recordReceiptPrint,
   refreshQuotaStatuses,
   registerPayment,
+  resetAdminPassword,
   reversePayment,
   safeDebugState,
+  updateAdmin,
   voidLoan
 } from './domain.mjs';
 import { defaultSqlitePath, loadSqliteState, withSqliteStateTransaction } from './sqlite-storage.mjs';
@@ -94,6 +96,8 @@ const routes = [
   }),
   route('GET', '/quotas', ({ state }) => refreshQuotaStatuses(state)),
   route('POST', '/admins', ({ state, actor, payload }) => createAdmin(state, actor, payload)),
+  route('POST', '/admins/update', ({ state, actor, payload }) => updateAdmin(state, actor, payload)),
+  route('POST', '/admins/reset-password', ({ state, actor, payload }) => resetAdminPassword(state, actor, payload)),
   route('POST', '/people', ({ state, actor, payload }) => createPerson(state, actor, payload)),
   route('POST', '/loans', ({ state, actor, payload }) => createLoan(state, actor, payload)),
   route('POST', '/loans/void', ({ state, actor, payload }) => voidLoan(state, actor, payload)),

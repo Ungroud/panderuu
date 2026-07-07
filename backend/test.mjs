@@ -29,7 +29,9 @@ import {
   quotaBalanceCents,
   refreshQuotaStatuses,
   registerPayment,
+  resetAdminPassword,
   reversePayment,
+  updateAdmin,
   voidLoan
 } from './domain.mjs';
 import { DEFAULT_TEMPORARY_PASSWORD, verifyPassword } from './auth.mjs';
@@ -204,6 +206,64 @@ assert.equal(createdAdmin.admin.status, 'activo');
 assert.equal(createdAdmin.admin.personId, createdAdmin.person.id);
 assert.deepEqual(createdAdmin.person.roles, ['Administrador', 'Prestamista']);
 assert.ok(administrators(state).some((admin) => admin.id === createdAdmin.admin.id && admin.person?.document === 'DNI 70000995'));
+
+assert.throws(
+  () =>
+    updateAdmin(state, admin2, {
+      adminId: createdAdmin.admin.id,
+      adminLevel: 1,
+      reason: 'Intento sin nivel suficiente'
+    }),
+  /permisos no autorizados/
+);
+
+assert.throws(
+  () =>
+    updateAdmin(state, admin3, {
+      adminId: admin3.id,
+      adminLevel: 2,
+      reason: 'Intento de bajar mi propio nivel'
+    }),
+  /No puedes bajar/
+);
+
+const createdAdminLogin = login(state, { username: createdAdmin.admin.username, password: DEFAULT_TEMPORARY_PASSWORD });
+const createdAdminSession = state.sessions.find((session) => session.actorId === createdAdmin.admin.id && !session.revokedAt);
+const resetAdmin = resetAdminPassword(state, admin3, {
+  adminId: createdAdmin.admin.id,
+  password: 'ClaveNueva123!',
+  reason: 'Rotacion operativa'
+});
+assert.equal(resetAdmin.admin.mustChangePassword, true);
+assert.ok(resetAdmin.revokedSessionIds.includes(createdAdminSession.id));
+assert.throws(() => authenticateSession(state, createdAdminLogin.token), /Sesion invalida/);
+assert.equal(verifyPassword('ClaveNueva123!', state.actors.find((item) => item.id === createdAdmin.admin.id).passwordHash), true);
+
+const updatedAdmin = updateAdmin(state, admin3, {
+  adminId: createdAdmin.admin.id,
+  adminLevel: 1,
+  status: 'inactivo',
+  reason: 'Reasignacion de permisos'
+});
+assert.equal(updatedAdmin.admin.adminLevel, 1);
+assert.equal(updatedAdmin.admin.status, 'inactivo');
+assert.throws(() => login(state, { username: createdAdmin.admin.username, password: 'ClaveNueva123!' }), /Usuario inactivo/);
+
+const adminControlState = seedState();
+const onlyLevel3 = adminControlState.actors.find((item) => item.adminLevel === 3);
+assert.throws(
+  () =>
+    updateAdmin(
+      adminControlState,
+      { id: 'admin-externo', name: 'Admin Externo', adminLevel: 3, status: 'activo' },
+      {
+        adminId: onlyLevel3.id,
+        status: 'inactivo',
+        reason: 'Dejaria el sistema sin nivel 3'
+      }
+    ),
+  /Debe existir al menos un administrador nivel 3 activo/
+);
 
 assert.throws(
   () =>

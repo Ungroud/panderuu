@@ -55,6 +55,10 @@ Solo nivel 3 puede crear administradores.
 El administrador creado queda vinculado a una persona con rol Administrador.
 El nivel permitido es 1, 2 o 3.
 El administrador puede incluir rol Prestamista si tambien podra recibir prestamos.
+Solo nivel 3 puede cambiar nivel o estado de otros administradores.
+No se puede dejar el sistema sin al menos un administrador nivel 3 activo.
+Todo cambio de nivel, estado o clave requiere motivo y queda auditado.
+Cambiar nivel/estado o resetear clave revoca sesiones activas del administrador afectado.
 ```
 
 Personas:
@@ -191,6 +195,8 @@ Endpoints:
 | GET | `/state` | Devuelve el estado completo para depuracion local. |
 | GET | `/quotas` | Devuelve cuotas con estados actualizados por fecha. |
 | POST | `/admins` | Crea administradores; requiere nivel 3. |
+| POST | `/admins/update` | Cambia nivel o estado de un administrador; requiere nivel 3 y motivo. |
+| POST | `/admins/reset-password` | Resetea clave de administrador, exige cambio posterior y revoca sesiones; requiere nivel 3 y motivo. |
 | POST | `/people` | Crea prestamistas/asociados. |
 | POST | `/loans` | Crea prestamos y descuenta caja. |
 | POST | `/loans/void` | Anula prestamo sin pagos activos y registra compensacion de caja. |

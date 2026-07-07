@@ -27,7 +27,7 @@ export function id(prefix) {
 }
 
 export function requireAdminLevel(actor, level, action) {
-  if (!actor || Number(actor.adminLevel) < level) {
+  if (!actor || Number(actor.adminLevel) < level || (actor.status && actor.status !== 'activo')) {
     const error = new Error(PERMISSION_ERROR);
     error.code = 'PERMISSION_DENIED';
     error.action = action;
@@ -313,6 +313,70 @@ export function createAdmin(state, actor, payload) {
     admin: publicActor(admin),
     person,
     temporaryPassword: payload.password ? undefined : DEFAULT_TEMPORARY_PASSWORD
+  };
+}
+
+export function updateAdmin(state, actor, payload) {
+  ensureStateCollections(state);
+  requireAdminLevel(actor, 3, 'administradores.actualizar');
+  const admin = state.actors.find((item) => item.id === payload?.adminId);
+  if (!admin || Number(admin.adminLevel) <= 0) throw validation('Administrador no encontrado');
+
+  const reason = requireReason(payload?.reason, 'Actualizar administrador requiere motivo');
+  const nextLevel = payload?.adminLevel === undefined ? Number(admin.adminLevel) : normalizeAdminLevel(payload.adminLevel);
+  const nextStatus = payload?.status === undefined ? admin.status || 'activo' : normalizeAdminStatus(payload.status);
+  const currentStatus = admin.status || 'activo';
+
+  if (admin.id === actor.id && (nextStatus !== 'activo' || nextLevel < 3)) {
+    throw validation('No puedes bajar o desactivar tu propio administrador desde la sesion actual');
+  }
+
+  if (!hasActiveLevel3AfterUpdate(state, admin.id, nextLevel, nextStatus)) {
+    throw validation('Debe existir al menos un administrador nivel 3 activo');
+  }
+
+  if (nextLevel === Number(admin.adminLevel) && nextStatus === currentStatus) {
+    throw validation('No hay cambios para actualizar');
+  }
+
+  const before = publicActor(admin);
+  admin.adminLevel = nextLevel;
+  admin.status = nextStatus;
+  const revokedSessionIds = nextLevel !== before.adminLevel || nextStatus !== before.status ? revokeSessionsForActor(state, admin.id) : [];
+
+  createAudit(state, actor, 'administradores.actualizar', 'actores', admin.id, 'ok', {
+    reason,
+    before,
+    after: publicActor(admin),
+    revokedSessionIds
+  });
+
+  return { admin: publicActor(admin), before, reason, revokedSessionIds };
+}
+
+export function resetAdminPassword(state, actor, payload) {
+  ensureStateCollections(state);
+  requireAdminLevel(actor, 3, 'administradores.resetear_clave');
+  const admin = state.actors.find((item) => item.id === payload?.adminId);
+  if (!admin || Number(admin.adminLevel) <= 0) throw validation('Administrador no encontrado');
+  const reason = requireReason(payload?.reason, 'Resetear clave requiere motivo');
+  const temporaryPassword = payload?.password || DEFAULT_TEMPORARY_PASSWORD;
+
+  admin.passwordHash = hashPassword(temporaryPassword);
+  admin.mustChangePassword = true;
+  admin.failedLoginCount = 0;
+  const revokedSessionIds = revokeSessionsForActor(state, admin.id);
+
+  createAudit(state, actor, 'administradores.resetear_clave', 'actores', admin.id, 'ok', {
+    reason,
+    revokedSessionIds,
+    temporary: !payload?.password
+  });
+
+  return {
+    admin: publicActor(admin),
+    temporaryPassword: payload?.password ? undefined : DEFAULT_TEMPORARY_PASSWORD,
+    revokedSessionIds
   };
 }
 
@@ -955,6 +1019,44 @@ function uniqueUsername(state, requestedUsername) {
     suffix += 1;
   }
   return candidate;
+}
+
+function normalizeAdminLevel(level) {
+  const value = Number(level);
+  if (![1, 2, 3].includes(value)) throw validation('El nivel de administrador debe ser 1, 2 o 3');
+  return value;
+}
+
+function normalizeAdminStatus(status) {
+  const value = String(status || '').trim().toLowerCase();
+  if (!['activo', 'inactivo'].includes(value)) throw validation('Estado de administrador invalido');
+  return value;
+}
+
+function requireReason(reason, message) {
+  const value = String(reason || '').trim();
+  if (!value) throw validation(message);
+  return value;
+}
+
+function hasActiveLevel3AfterUpdate(state, adminId, nextLevel, nextStatus) {
+  return state.actors.some((item) => {
+    const level = item.id === adminId ? nextLevel : Number(item.adminLevel);
+    const status = item.id === adminId ? nextStatus : item.status || 'activo';
+    return Number(level) >= 3 && status === 'activo';
+  });
+}
+
+function revokeSessionsForActor(state, actorId) {
+  const revokedAt = nowIso();
+  const revokedSessionIds = [];
+  for (const session of state.sessions || []) {
+    if (session.actorId === actorId && !session.revokedAt) {
+      session.revokedAt = revokedAt;
+      revokedSessionIds.push(session.id);
+    }
+  }
+  return revokedSessionIds;
 }
 
 function authFailed(message = 'Credenciales invalidas') {

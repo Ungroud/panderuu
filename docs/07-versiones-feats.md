@@ -71,6 +71,9 @@ Features:
 
 - Administrador semilla nivel 3.
 - Login local.
+- Cambio obligatorio de clave.
+- Reset de clave con motivo y revocacion de sesiones.
+- Actualizacion de nivel/estado de administradores por nivel 3.
 - Roles acumulables.
 - Permisos por nivel.
 - Bloqueo `"permisos no autorizados"`.

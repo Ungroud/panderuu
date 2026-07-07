@@ -30,6 +30,10 @@ Solo un administrador nivel 3 puede crear administradores.
 El nuevo administrador debe quedar registrado como persona con rol Administrador.
 El nivel asignado debe ser 1, 2 o 3.
 Todo intento de nivel 1 o 2 para crear administradores responde "permisos no autorizados".
+Solo nivel 3 puede cambiar nivel, activar/inactivar administradores o resetear claves.
+No se puede dejar el sistema sin al menos un administrador nivel 3 activo.
+No se permite que un administrador se baje de nivel o se inactive a si mismo desde su sesion activa.
+Cada cambio sensible exige motivo, auditoria y revocacion de sesiones del administrador afectado.
 ```
 
 Un administrador tambien puede tener rol `Prestamista` si se desea habilitarlo para recibir prestamos.
