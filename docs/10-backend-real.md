@@ -158,6 +158,16 @@ Toda reimpresion exige motivo.
 El historial de impresion guarda snapshot del preview.
 ```
 
+Perfiles y audios:
+
+```text
+Las personas pueden guardar foto opcional como ruta local.
+Los audios de empeno se guardan como metadata: ruta local, tipo MIME, duracion, SHA-256, consentimiento, administrador y fecha.
+El archivo de audio no se guarda como blob en SQLite.
+Registrar audio requiere administrador nivel 2 o superior.
+El audio puede vincularse a una persona y opcionalmente a un prestamo de la misma persona.
+```
+
 ## API local
 
 Servidor:
@@ -188,6 +198,7 @@ Endpoints:
 | GET | `/admins` | Devuelve administradores y persona vinculada cuando existe. |
 | GET | `/people` | Devuelve todas las personas registradas. |
 | GET | `/people/profile?id=...` | Devuelve perfil con prestamos, cuotas, pagos y boletas. |
+| GET | `/collateral-audios?personId=...` | Devuelve metadata de audios de empeno, opcionalmente filtrada por persona. |
 | GET | `/receipts` | Devuelve boletas registradas. |
 | GET | `/receipts/preview?id=...` | Devuelve preview imprimible de una boleta. |
 | GET | `/borrowers` | Devuelve personas con rol Prestamista. |
@@ -198,6 +209,7 @@ Endpoints:
 | POST | `/admins/update` | Cambia nivel o estado de un administrador; requiere nivel 3 y motivo. |
 | POST | `/admins/reset-password` | Resetea clave de administrador, exige cambio posterior y revoca sesiones; requiere nivel 3 y motivo. |
 | POST | `/people` | Crea prestamistas/asociados. |
+| POST | `/collateral-audios` | Registra metadata de audio de empeno; requiere nivel 2, hash SHA-256 y consentimiento. |
 | POST | `/loans` | Crea prestamos y descuenta caja. |
 | POST | `/loans/void` | Anula prestamo sin pagos activos y registra compensacion de caja. |
 | POST | `/payments` | Registra pagos, genera caja y boleta. |

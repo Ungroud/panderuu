@@ -93,6 +93,7 @@ Features:
 - Perfil de asociado.
 - Perfil de administrador.
 - Foto opcional.
+- Metadata de audios de empeno con hash SHA-256 y consentimiento.
 
 ## v0.7 - Prestamos
 

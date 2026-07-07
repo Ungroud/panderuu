@@ -79,6 +79,7 @@ natural -> document = DNI ########
 empresa -> document = RUC ###########
 phone -> 9 digitos
 email -> minusculas
+photo_path -> ruta local opcional
 roles -> Administrador, Prestamista y/o Asociado
 ```
 
@@ -353,6 +354,29 @@ Para empenos o mayor evidencia:
 | consent_recorded | boolean | Consentimiento. |
 | created_at | datetime | Fecha. |
 | deleted_at | datetime | Eliminacion logica. |
+
+En backend v1 viven en:
+
+```text
+collateral_audios
+```
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | text | Identificador. |
+| person_id | text | Persona vinculada. |
+| loan_id | text | Prestamo opcional de la misma persona. |
+| file_path | text | Ruta local del archivo. |
+| mime_type | text | `audio/webm`, `audio/wav`, `audio/mpeg`, `audio/mp4`, `audio/ogg` o `audio/x-m4a`. |
+| duration_ms | integer | Duracion positiva, maximo 30 minutos. |
+| sha256 | text | Hash de integridad del archivo. |
+| note | text | Nota opcional. |
+| consent_recorded | integer | Debe ser verdadero para registrar. |
+| recorded_by | text | Administrador que registro. |
+| recorded_at | text | Fecha. |
+| status | text | `activo` por defecto. |
+| deleted_at | text | Reservado para eliminacion logica. |
+| delete_reason | text | Reservado para motivo de eliminacion logica. |
 
 ## Auditoria
 

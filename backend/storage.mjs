@@ -7,7 +7,7 @@ export const defaultPath = '.data/backend/panderuu.json';
 export function seedState() {
   const createdAt = new Date().toISOString();
   return {
-    version: 9,
+    version: 10,
     actors: [
       seedActor('admin-seed', 'Admin Semilla', 3, 'admin.seed', true, createdAt),
       seedActor('admin-caja', 'Caja Nivel 2', 2, 'caja.nivel2', false, createdAt),
@@ -22,6 +22,7 @@ export function seedState() {
         phone: '999111222',
         email: 'cliente.nuevo@example.local',
         address: 'Direccion demo 101',
+        photoPath: '',
         roles: ['Prestamista'],
         creditStatus: 'nuevo',
         loansCount: 0,
@@ -37,6 +38,7 @@ export function seedState() {
         phone: '999333444',
         email: 'empresa@example.local',
         address: 'Av. Demo 245',
+        photoPath: '',
         roles: ['Asociado', 'Prestamista'],
         creditStatus: 'buen_historial',
         loansCount: 3,
@@ -65,6 +67,7 @@ export function seedState() {
     cashClosures: [],
     receipts: [],
     receiptPrints: [],
+    collateralAudios: [],
     auditEvents: [],
     sessions: []
   };

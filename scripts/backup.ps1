@@ -26,7 +26,7 @@ $manifestPath = Join-Path $dataDir 'backup-manifest.txt'
 "Repo: $root" | Add-Content -Path $manifestPath -Encoding ASCII
 
 $items = @()
-foreach ($relative in @('panderuu.db', 'audio', 'receipts', 'backup-manifest.txt')) {
+foreach ($relative in @('panderuu.db', 'audio', 'photos', 'receipts', 'backup-manifest.txt')) {
   $path = Join-Path $dataDir $relative
   if (Test-Path $path) {
     $items += $path
@@ -40,4 +40,3 @@ if ($items.Count -eq 0) {
 
 Compress-Archive -Path $items -DestinationPath $zipPath -Force
 Write-PanderuuOk "Backup creado: $zipPath"
-

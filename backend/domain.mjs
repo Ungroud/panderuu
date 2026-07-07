@@ -259,6 +259,7 @@ export function createPerson(state, actor, payload) {
     phone,
     email,
     address: payload.address.trim(),
+    photoPath: normalizeOptionalLocalFilePath(payload.photoPath),
     roles,
     creditStatus: 'nuevo',
     loansCount: 0,
@@ -414,6 +415,7 @@ export function personProfile(state, personId) {
   const quotas = state.quotas.filter((quota) => loanIds.has(quota.loanId));
   const payments = state.payments.filter((payment) => payment.personId === person.id);
   const receipts = state.receipts.filter((receipt) => loanIds.has(receipt.loanId));
+  const collateralAudios = state.collateralAudios.filter((audio) => audio.personId === person.id && audio.status !== 'eliminado');
   const admin = state.actors.find((actor) => actor.personId === person.id) || null;
   return {
     person,
@@ -422,14 +424,72 @@ export function personProfile(state, personId) {
     quotas,
     payments,
     receipts,
+    collateralAudios,
     summary: {
       loanCount: loans.length,
       activeLoanCount: loans.filter((loan) => loan.status !== 'pagado' && loan.status !== 'anulado').length,
       paymentCount: payments.length,
       quotaCount: quotas.length,
-      receiptCount: receipts.length
+      receiptCount: receipts.length,
+      collateralAudioCount: collateralAudios.length
     }
   };
+}
+
+export function collateralAudios(state, options = {}) {
+  ensureStateCollections(state);
+  const personId = options.personId || '';
+  return personId ? state.collateralAudios.filter((audio) => audio.personId === personId) : state.collateralAudios;
+}
+
+export function recordCollateralAudio(state, actor, payload) {
+  ensureStateCollections(state);
+  requireAdminLevel(actor, 2, 'audios_empeno.registrar');
+  const person = state.people.find((item) => item.id === payload?.personId);
+  if (!person) throw validation('Persona no encontrada para audio');
+
+  const loanId = payload?.loanId || null;
+  if (loanId) {
+    const loan = state.loans.find((item) => item.id === loanId);
+    if (!loan) throw validation('Prestamo no encontrado para audio');
+    if (loan.personId !== person.id) throw validation('El audio debe pertenecer a la misma persona del prestamo');
+    if (loan.status === 'anulado') throw validation('No se puede asociar audio a un prestamo anulado');
+  }
+
+  const filePath = normalizeLocalFilePath(payload?.filePath);
+  const mimeType = normalizeAudioMime(payload?.mimeType);
+  const durationMs = normalizeDurationMs(payload?.durationMs);
+  const sha256 = normalizeSha256(payload?.sha256);
+  const note = String(payload?.note || '').trim();
+  const consentRecorded = payload?.consentRecorded === true;
+  if (!consentRecorded) throw validation('El consentimiento de grabacion es obligatorio');
+
+  const audio = {
+    id: id('audio'),
+    personId: person.id,
+    loanId,
+    filePath,
+    mimeType,
+    durationMs,
+    sha256,
+    note,
+    consentRecorded,
+    recordedBy: actor.id,
+    recordedAt: nowIso(),
+    status: 'activo',
+    deletedAt: '',
+    deleteReason: ''
+  };
+
+  state.collateralAudios.unshift(audio);
+  createAudit(state, actor, 'audios_empeno.registrar', 'audios_empeno', audio.id, 'ok', {
+    personId: person.id,
+    loanId,
+    sha256,
+    durationMs,
+    consentRecorded
+  });
+  return audio;
 }
 
 export function receipts(state) {
@@ -958,6 +1018,7 @@ function ensureStateCollections(state) {
   state.cashClosures ||= [];
   state.receipts ||= [];
   state.receiptPrints ||= [];
+  state.collateralAudios ||= [];
   state.auditEvents ||= [];
   state.quotas ||= [];
   state.paymentApplications ||= [];
@@ -1105,6 +1166,41 @@ function normalizeEmail(email) {
   const value = String(email || '').trim().toLowerCase();
   if (!value) return '';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw validation('Correo invalido');
+  return value;
+}
+
+function normalizeOptionalLocalFilePath(filePath) {
+  const value = String(filePath || '').trim();
+  return value ? normalizeLocalFilePath(value) : '';
+}
+
+function normalizeLocalFilePath(filePath) {
+  const value = String(filePath || '').trim();
+  if (!value) throw validation('La ruta del archivo es obligatoria');
+  if (value.length > 500) throw validation('La ruta del archivo es demasiado larga');
+  if (/^https?:\/\//i.test(value)) throw validation('La ruta del archivo debe ser local');
+  if (value.includes('\0')) throw validation('La ruta del archivo no es valida');
+  if (value.split(/[\\/]+/).includes('..')) throw validation('La ruta del archivo no puede subir directorios');
+  return value;
+}
+
+function normalizeAudioMime(mimeType) {
+  const value = String(mimeType || '').trim().toLowerCase();
+  const allowed = new Set(['audio/webm', 'audio/wav', 'audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/x-m4a']);
+  if (!allowed.has(value)) throw validation('Tipo de audio no permitido');
+  return value;
+}
+
+function normalizeDurationMs(durationMs) {
+  const value = Number(durationMs);
+  if (!Number.isInteger(value) || value <= 0) throw validation('La duracion del audio debe ser positiva');
+  if (value > 30 * 60 * 1000) throw validation('La duracion maxima del audio es 30 minutos');
+  return value;
+}
+
+function normalizeSha256(sha256) {
+  const value = String(sha256 || '').trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(value)) throw validation('SHA-256 invalido');
   return value;
 }
 

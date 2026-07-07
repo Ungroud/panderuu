@@ -12,6 +12,7 @@ import {
   cashReport,
   changePassword,
   closeCash,
+  collateralAudios,
   createAdmin,
   createLoan,
   createPerson,
@@ -25,6 +26,7 @@ import {
   personProfile,
   receiptPreview,
   receipts,
+  recordCollateralAudio,
   recordReceiptPrint,
   quotaBalanceCents,
   refreshQuotaStatuses,
@@ -91,11 +93,13 @@ const person = createPerson(state, admin2, {
   phone: '999 000 111',
   email: 'backend@example.local',
   address: 'Direccion backend',
+  photoPath: '.data/photos/persona-demo.jpg',
   roles: ['Prestamista']
 });
 assert.equal(person.creditStatus, 'nuevo');
 assert.equal(person.document, 'DNI 70000998');
 assert.equal(person.phone, '999000111');
+assert.equal(person.photoPath, '.data/photos/persona-demo.jpg');
 
 assert.throws(
   () =>
@@ -162,6 +166,59 @@ assert.ok(people(state).some((item) => item.id === associate.id));
 assert.ok(peopleByRole(state, 'Asociado').some((item) => item.id === associate.id));
 assert.ok(peopleByRole(state, 'Prestamista').some((item) => item.id === person.id));
 assert.equal(personProfile(state, associate.id).summary.loanCount, 0);
+
+assert.throws(
+  () =>
+    recordCollateralAudio(state, admin1, {
+      personId: person.id,
+      filePath: '.data/audio/bloqueado.webm',
+      mimeType: 'audio/webm',
+      durationMs: 1200,
+      sha256: 'a'.repeat(64),
+      consentRecorded: true
+    }),
+  /permisos no autorizados/
+);
+
+assert.throws(
+  () =>
+    recordCollateralAudio(state, admin2, {
+      personId: person.id,
+      filePath: '.data/audio/sin-consentimiento.webm',
+      mimeType: 'audio/webm',
+      durationMs: 1200,
+      sha256: 'b'.repeat(64),
+      consentRecorded: false
+    }),
+  /consentimiento/
+);
+
+assert.throws(
+  () =>
+    recordCollateralAudio(state, admin2, {
+      personId: person.id,
+      filePath: '.data/audio/hash-malo.webm',
+      mimeType: 'audio/webm',
+      durationMs: 1200,
+      sha256: 'hash-malo',
+      consentRecorded: true
+    }),
+  /SHA-256 invalido/
+);
+
+const collateralAudio = recordCollateralAudio(state, admin2, {
+  personId: person.id,
+  filePath: '.data/audio/persona-demo-empeno.webm',
+  mimeType: 'audio/webm',
+  durationMs: 3500,
+  sha256: 'c'.repeat(64),
+  note: 'Audio para posible garantia de mayor prestamo',
+  consentRecorded: true
+});
+assert.equal(collateralAudio.personId, person.id);
+assert.equal(collateralAudio.status, 'activo');
+assert.ok(collateralAudios(state, { personId: person.id }).some((item) => item.id === collateralAudio.id));
+assert.equal(personProfile(state, person.id).summary.collateralAudioCount, 1);
 
 assert.throws(
   () =>
@@ -332,6 +389,17 @@ const multiLoan = createLoan(state, admin2, {
   installments: 3,
   loanDate: '2026-07-15'
 });
+const loanCollateralAudio = recordCollateralAudio(state, admin2, {
+  personId: person.id,
+  loanId: multiLoan.id,
+  filePath: '.data/audio/persona-demo-prestamo.webm',
+  mimeType: 'audio/webm',
+  durationMs: 4200,
+  sha256: 'd'.repeat(64),
+  note: 'Audio vinculado al prestamo',
+  consentRecorded: true
+});
+assert.equal(loanCollateralAudio.loanId, multiLoan.id);
 const multiQuotas = state.quotas.filter((quota) => quota.loanId === multiLoan.id).sort((left, right) => left.number - right.number);
 assert.equal(multiQuotas.length, 3);
 assert.deepEqual(
@@ -485,12 +553,31 @@ try {
       phone: '999 123 456',
       email: 'sqlite@example.local',
       address: 'Direccion SQLite',
+      photoPath: '.data/photos/sqlite.jpg',
       roles: ['Prestamista']
     });
   });
 
   const stateAfterPerson = loadSqliteState(sqlitePath);
   assert.ok(stateAfterPerson.people.some((item) => item.id === persistedPerson.id));
+  assert.equal(stateAfterPerson.people.find((item) => item.id === persistedPerson.id).photoPath, '.data/photos/sqlite.jpg');
+
+  const persistedAudio = withSqliteStateTransaction(sqlitePath, (txState) => {
+    const actor = txState.actors.find((item) => item.id === 'admin-caja');
+    return recordCollateralAudio(txState, actor, {
+      personId: persistedPerson.id,
+      filePath: '.data/audio/sqlite-empeno.webm',
+      mimeType: 'audio/webm',
+      durationMs: 2500,
+      sha256: 'e'.repeat(64),
+      note: 'Persistencia SQLite',
+      consentRecorded: true
+    });
+  });
+
+  const stateAfterAudio = loadSqliteState(sqlitePath);
+  assert.ok(stateAfterAudio.collateralAudios.some((item) => item.id === persistedAudio.id));
+  assert.equal(personProfile(stateAfterAudio, persistedPerson.id).summary.collateralAudioCount, 1);
 
   const persistedAdmin = withSqliteStateTransaction(sqlitePath, (txState) => {
     const actor = txState.actors.find((item) => item.id === 'admin-seed');

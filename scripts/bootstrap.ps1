@@ -14,6 +14,7 @@ $dirs = @(
   '.data',
   '.data\backups',
   '.data\audio',
+  '.data\photos',
   '.data\receipts',
   'src',
   'src-tauri',
@@ -50,4 +51,3 @@ if ($Install) {
 } else {
   Write-PanderuuWarn 'No se instalaron dependencias. Usa scripts/bootstrap.ps1 -Install cuando exista acceso a red.'
 }
-

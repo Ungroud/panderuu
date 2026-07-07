@@ -99,6 +99,15 @@ Reglas:
 - Con buen historial pueden acceder a montos mayores segun criterio del administrador.
 - Las excepciones deben registrar administrador, motivo y fecha.
 
+Audios de garantia/empeno:
+
+- El audio no autoriza automaticamente montos mayores.
+- Registrar audio requiere administrador nivel 2 o superior.
+- Debe existir consentimiento de grabacion.
+- El sistema guarda ruta local, tipo de audio, duracion y hash SHA-256.
+- El archivo de audio no se guarda como blob dentro de SQLite.
+- Puede vincularse a la persona o a un prestamo especifico de esa misma persona.
+
 ## Asociados
 
 Un asociado puede ser persona natural o empresa.

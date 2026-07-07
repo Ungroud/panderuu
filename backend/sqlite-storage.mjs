@@ -247,6 +247,30 @@ export const migrations = [
         preview_json TEXT NOT NULL
       );
     `
+  },
+  {
+    version: 10,
+    name: '010_people_photos_collateral_audios',
+    sql: `
+      ALTER TABLE people ADD COLUMN photo_path TEXT NOT NULL DEFAULT '';
+
+      CREATE TABLE IF NOT EXISTS collateral_audios (
+        id TEXT PRIMARY KEY,
+        person_id TEXT NOT NULL,
+        loan_id TEXT,
+        file_path TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        sha256 TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        consent_recorded INTEGER NOT NULL DEFAULT 0,
+        recorded_by TEXT NOT NULL,
+        recorded_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'activo',
+        deleted_at TEXT NOT NULL DEFAULT '',
+        delete_reason TEXT NOT NULL DEFAULT ''
+      );
+    `
   }
 ];
 
@@ -400,7 +424,7 @@ export function migrationSummary(db) {
 
 export function readStateFromDb(db) {
   return {
-    version: 9,
+    version: 10,
     actors: db
       .prepare(
         `SELECT id, name, admin_level AS adminLevel, seed_admin AS seedAdmin,
@@ -428,6 +452,7 @@ export function readStateFromDb(db) {
     people: db
       .prepare(
         `SELECT id, type, name, document, phone, email, address, roles_json AS rolesJson,
+          photo_path AS photoPath,
           credit_status AS creditStatus, loans_count AS loansCount, punctual_loans AS punctualLoans,
           registered_by AS registeredBy, created_at AS createdAt
         FROM people ORDER BY created_at DESC, rowid DESC`
@@ -441,6 +466,7 @@ export function readStateFromDb(db) {
         phone: person.phone,
         email: person.email,
         address: person.address,
+        photoPath: person.photoPath || '',
         roles: parseJson(person.rolesJson, []),
         creditStatus: person.creditStatus,
         loansCount: Number(person.loansCount),
@@ -526,6 +552,16 @@ export function readStateFromDb(db) {
       )
       .all()
       .map(toReceiptPrint),
+    collateralAudios: db
+      .prepare(
+        `SELECT id, person_id AS personId, loan_id AS loanId, file_path AS filePath,
+          mime_type AS mimeType, duration_ms AS durationMs, sha256, note,
+          consent_recorded AS consentRecorded, recorded_by AS recordedBy,
+          recorded_at AS recordedAt, status, deleted_at AS deletedAt, delete_reason AS deleteReason
+        FROM collateral_audios ORDER BY recorded_at DESC, rowid DESC`
+      )
+      .all()
+      .map(toCollateralAudio),
     auditEvents: db
       .prepare(
         `SELECT id, at, actor_id AS actorId, actor_name AS actorName, admin_level AS adminLevel,
@@ -568,6 +604,7 @@ export function writeStateToDb(db, state) {
   db.exec(`
     DELETE FROM sessions;
     DELETE FROM audit_events;
+    DELETE FROM collateral_audios;
     DELETE FROM receipt_prints;
     DELETE FROM receipts;
     DELETE FROM cash_closures;
@@ -607,9 +644,9 @@ export function writeStateToDb(db, state) {
 
   const insertPerson = db.prepare(`
     INSERT INTO people (
-      id, type, name, document, phone, email, address, roles_json, credit_status,
+      id, type, name, document, phone, email, address, photo_path, roles_json, credit_status,
       loans_count, punctual_loans, registered_by, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const person of state.people) {
     insertPerson.run(
@@ -620,6 +657,7 @@ export function writeStateToDb(db, state) {
       person.phone,
       person.email || '',
       person.address,
+      person.photoPath || '',
       JSON.stringify(person.roles || []),
       person.creditStatus,
       Number(person.loansCount || 0),
@@ -813,6 +851,31 @@ export function writeStateToDb(db, state) {
     );
   }
 
+  const insertCollateralAudio = db.prepare(`
+    INSERT INTO collateral_audios (
+      id, person_id, loan_id, file_path, mime_type, duration_ms, sha256, note,
+      consent_recorded, recorded_by, recorded_at, status, deleted_at, delete_reason
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const audio of state.collateralAudios || []) {
+    insertCollateralAudio.run(
+      audio.id,
+      audio.personId,
+      audio.loanId || null,
+      audio.filePath,
+      audio.mimeType,
+      Number(audio.durationMs),
+      audio.sha256,
+      audio.note || '',
+      audio.consentRecorded ? 1 : 0,
+      audio.recordedBy,
+      audio.recordedAt,
+      audio.status || 'activo',
+      audio.deletedAt || '',
+      audio.deleteReason || ''
+    );
+  }
+
   const insertAudit = db.prepare(`
     INSERT INTO audit_events (
       id, at, actor_id, actor_name, admin_level, action, entity_type, entity_id, result, details_json
@@ -1000,5 +1063,24 @@ function toReceiptPrint(print) {
     printedAt: print.printedAt,
     reason: print.reason,
     previewJson: parseJson(print.previewJson, {})
+  };
+}
+
+function toCollateralAudio(audio) {
+  return {
+    id: audio.id,
+    personId: audio.personId,
+    loanId: audio.loanId || null,
+    filePath: audio.filePath,
+    mimeType: audio.mimeType,
+    durationMs: Number(audio.durationMs),
+    sha256: audio.sha256,
+    note: audio.note || '',
+    consentRecorded: Boolean(audio.consentRecorded),
+    recordedBy: audio.recordedBy,
+    recordedAt: audio.recordedAt,
+    status: audio.status || 'activo',
+    deletedAt: audio.deletedAt || '',
+    deleteReason: audio.deleteReason || ''
   };
 }
