@@ -157,6 +157,18 @@ Acciones segun permisos:
 - Subir foto.
 - Grabar audio para empeno.
 
+## Registrar audio de empeno
+
+Flujo:
+
+1. Administrador nivel 2 o 3 abre perfil de prestamista/asociado.
+2. Presiona registrar audio.
+3. Selecciona si el audio queda ligado solo a la persona o a un prestamo activo.
+4. Registra ruta local, tipo de audio, duracion, SHA-256, nota y consentimiento.
+5. El backend valida permisos, persona, prestamo, hash y consentimiento.
+6. Se guarda metadata del audio y auditoria.
+7. El perfil muestra el audio como evidencia disponible.
+
 ## Perfil de administrador
 
 Debe mostrar:
@@ -168,6 +180,40 @@ Debe mostrar:
 - Pagos registrados.
 - Ganancias por intereses con filtros diario, semanal y mensual.
 - Prestamos propios si tiene rol prestamista.
+
+## Administradores
+
+Vista:
+
+- Nombre visible.
+- Usuario.
+- Nivel 1, 2 o 3.
+- Estado activo o inactivo.
+- Persona vinculada.
+- Cambio de clave pendiente.
+- Administrador que lo creo.
+
+Crear administrador:
+
+1. Administrador nivel 3 abre formulario.
+2. Registra datos localizables de la persona.
+3. Define usuario, nivel y clave temporal.
+4. Opcionalmente marca si tambien sera prestamista.
+5. Backend crea persona, actor, hash de clave y auditoria.
+
+Actualizar administrador:
+
+1. Administrador nivel 3 selecciona editar.
+2. Cambia nivel o estado.
+3. Ingresa motivo obligatorio.
+4. Backend valida que quede al menos un nivel 3 activo.
+5. Backend revoca sesiones del administrador afectado y audita.
+
+Resetear clave:
+
+1. Administrador nivel 3 selecciona clave.
+2. Ingresa nueva clave temporal y motivo.
+3. Backend guarda hash, exige cambio de clave y revoca sesiones activas.
 
 ## Caja
 

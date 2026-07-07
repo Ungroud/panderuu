@@ -9,6 +9,12 @@ const admins = [
   { name: 'Informes Nivel 1', level: 1 }
 ];
 
+let adminUsers = [
+  { id: 'admin-seed', name: 'Admin Semilla', username: 'admin.seed', adminLevel: 3, status: 'activo', personId: null, personName: '-', createdBy: 'system', mustChangePassword: true },
+  { id: 'admin-caja', name: 'Caja Nivel 2', username: 'caja.nivel2', adminLevel: 2, status: 'activo', personId: null, personName: '-', createdBy: 'admin-seed', mustChangePassword: true },
+  { id: 'admin-reportes', name: 'Informes Nivel 1', username: 'reportes.nivel1', adminLevel: 1, status: 'activo', personId: null, personName: '-', createdBy: 'admin-seed', mustChangePassword: true }
+];
+
 let people = [
   {
     id: 'p-001',
@@ -151,6 +157,7 @@ const state = {
   loginError: '',
   targetLoanId: '',
   targetPaymentId: '',
+  targetAdminId: '',
   receipt: {
     number: 'BOL-2026-0001',
     person: 'Cliente Demo Nuevo',
@@ -171,6 +178,7 @@ const state = {
 let receipts = [state.receipt];
 let cashClosures = [];
 let registeredPayments = [];
+let collateralAudios = [];
 
 function saveApp() {
   try {
@@ -184,6 +192,8 @@ function saveApp() {
         receipts,
         cashClosures,
         registeredPayments,
+        adminUsers,
+        collateralAudios,
         state: {
           adminLevel: state.adminLevel,
           activeView: state.activeView,
@@ -196,6 +206,7 @@ function saveApp() {
           authChecked: state.authChecked,
           demoMode: state.demoMode,
           loginError: state.loginError,
+          targetAdminId: state.targetAdminId,
           receipt: state.receipt
         }
       })
@@ -217,6 +228,8 @@ function loadApp() {
     receipts = stored.receipts || receipts;
     cashClosures = stored.cashClosures || cashClosures;
     registeredPayments = stored.registeredPayments || registeredPayments;
+    adminUsers = stored.adminUsers || adminUsers;
+    collateralAudios = stored.collateralAudios || collateralAudios;
     Object.assign(state, stored.state || {});
   } catch (error) {
     console.warn('No se pudo cargar estado local', error);
@@ -357,11 +370,45 @@ function applyBackendState(backend) {
     phone: person.phone,
     email: person.email,
     address: person.address,
+    photoPath: person.photoPath || '',
     roles: person.roles || [],
     credit: String(person.creditStatus || 'nuevo').replace('_', ' '),
     loansCount: Number(person.loansCount || 0),
     punctualLoans: Number(person.punctualLoans || 0),
     registeredBy: person.registeredBy || 'Sistema'
+  }));
+
+  adminUsers = (backend.actors || [])
+    .filter((actor) => Number(actor.adminLevel || 0) > 0)
+    .map((actor) => {
+      const person = people.find((item) => item.id === actor.personId);
+      return {
+        id: actor.id,
+        name: actor.name,
+        username: actor.username,
+        adminLevel: Number(actor.adminLevel || 0),
+        status: actor.status || 'activo',
+        personId: actor.personId || null,
+        personName: person?.name || '-',
+        createdBy: actor.createdBy || 'system',
+        mustChangePassword: Boolean(actor.mustChangePassword),
+        lastLoginAt: String(actor.lastLoginAt || '').slice(0, 10)
+      };
+    });
+
+  collateralAudios = (backend.collateralAudios || []).map((audio) => ({
+    id: audio.id,
+    personId: audio.personId,
+    loanId: audio.loanId || '',
+    filePath: audio.filePath,
+    mimeType: audio.mimeType,
+    durationMs: Number(audio.durationMs || 0),
+    sha256: audio.sha256,
+    note: audio.note || '',
+    consentRecorded: Boolean(audio.consentRecorded),
+    recordedBy: audio.recordedBy,
+    recordedAt: String(audio.recordedAt || '').slice(0, 10),
+    status: audio.status || 'activo'
   }));
 
   const quotasByLoan = new Map();
@@ -473,11 +520,23 @@ const icons = {
   plus: '<svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z"/></svg>',
   alert: '<svg viewBox="0 0 24 24"><path d="M12 2 1 21h22L12 2Zm1 15h-2v2h2v-2Zm0-8h-2v6h2V9Z"/></svg>',
   shield: '<svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5l-8-3Zm-1 14-3-3 1.4-1.4 1.6 1.6 3.8-3.8L16.2 11 11 16Z"/></svg>',
-  chart: '<svg viewBox="0 0 24 24"><path d="M4 20V4h2v14h14v2H4Zm4-4h2V9H8v7Zm4 0h2V6h-2v10Zm4 0h2v-5h-2v5Z"/></svg>'
+  chart: '<svg viewBox="0 0 24 24"><path d="M4 20V4h2v14h14v2H4Zm4-4h2V9H8v7Zm4 0h2V6h-2v10Zm4 0h2v-5h-2v5Z"/></svg>',
+  key: '<svg viewBox="0 0 24 24"><path d="M7 14a5 5 0 1 1 4.6-3h9.4v3h-3v3h-3v-3h-3.4A5 5 0 0 1 7 14Zm0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/></svg>',
+  audio: '<svg viewBox="0 0 24 24"><path d="M12 3a4 4 0 0 0-4 4v5a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4Zm-6 9H4a8 8 0 0 0 7 7.9V22h2v-2.1A8 8 0 0 0 20 12h-2a6 6 0 0 1-12 0Z"/></svg>'
 };
 
 function money(value) {
   return new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(value);
+}
+
+function slugify(value) {
+  return String(value || 'registro')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'registro';
 }
 
 function loanBalance(loan) {
@@ -523,7 +582,8 @@ function viewTitle() {
     pagos: ['Pagos', 'Cuotas prioritarias y pagos registrados'],
     caja: ['Caja', 'Movimientos, ingresos y cierre de caja'],
     boletas: ['Boletas', 'Vista previa, correlativos e impresiones'],
-    reportes: ['Reportes', 'Indicadores de intereses, pagos y caja']
+    reportes: ['Reportes', 'Indicadores de intereses, pagos y caja'],
+    administradores: ['Administradores', 'Niveles, estado y claves']
   };
   return titles[state.activeView] || titles.dashboard;
 }
@@ -601,6 +661,7 @@ function render() {
           ${navButton('Caja', 'wallet', 'caja')}
           ${navButton('Boletas', 'printer', 'boletas')}
           ${navButton('Reportes', 'chart', 'reportes')}
+          ${navButton('Administradores', 'shield', 'administradores')}
         </nav>
       </aside>
 
@@ -638,6 +699,7 @@ function render() {
           ${actionButton('Ingresar caja', 'wallet', 'ingresoCaja')}
           ${actionButton('Cerrar caja', 'chart', 'cierreCaja')}
           ${actionButton('Informe impreso', 'printer', 'boleta')}
+          ${actionButton('Agregar admin', 'shield', 'administrador')}
         </section>
 
         ${renderActiveView(selectedPerson, selectedLoans)}
@@ -669,6 +731,7 @@ function renderActiveView(selectedPerson, selectedLoans) {
   if (state.activeView === 'caja') return cashSection();
   if (state.activeView === 'boletas') return receiptsSection();
   if (state.activeView === 'reportes') return reportsSection();
+  if (state.activeView === 'administradores') return adminsSection();
   return dashboardSection(selectedPerson, selectedLoans);
 }
 
@@ -709,6 +772,31 @@ function peopleSection(title, predicate) {
         <tbody>${filtered
           .map(
             (person) => `<tr data-person="${person.id}"><td>${person.name}</td><td>${person.document}</td><td>${person.phone}</td><td>${person.roles.join(' / ')}</td><td>${badge(person.credit)}</td><td>${person.registeredBy}</td></tr>`
+          )
+          .join('')}</tbody>
+      </table></div>
+    </div>
+  </section>`;
+}
+
+function adminsSection() {
+  return `<section class="single-grid">
+    <div class="panel">
+      <div class="panel-header"><div><p class="eyebrow">Control</p><h2>${adminUsers.length} administradores registrados</h2></div>${icons.shield}</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Nombre</th><th>Usuario</th><th>Nivel</th><th>Estado</th><th>Persona</th><th>Clave</th><th>Creado por</th><th>Acciones</th></tr></thead>
+        <tbody>${adminUsers
+          .map(
+            (admin) => `<tr>
+              <td>${admin.name}</td>
+              <td>${admin.username}</td>
+              <td>Nivel ${admin.adminLevel}</td>
+              <td>${badge(admin.status)}</td>
+              <td>${admin.personName || '-'}</td>
+              <td>${admin.mustChangePassword ? badge('pendiente') : badge('activo')}</td>
+              <td>${admin.createdBy || '-'}</td>
+              <td><div class="row-actions"><button class="small-button" data-edit-admin="${admin.id}" type="button">${icons.shield} Editar</button><button class="small-button" data-reset-admin="${admin.id}" type="button">${icons.key} Clave</button></div></td>
+            </tr>`
           )
           .join('')}</tbody>
       </table></div>
@@ -865,21 +953,31 @@ function peopleList() {
 }
 
 function profile(person, personLoans) {
+  const personAudios = collateralAudios.filter((audio) => audio.personId === person.id && audio.status !== 'eliminado');
   return `<div class="panel-header"><div><p class="eyebrow">Perfil</p><h2>${person.name}</h2></div>${icons.users}</div>
     <div class="profile-card">
       <div class="profile-avatar">${person.name.slice(0, 1)}</div>
-      <div><p>${person.document}</p><p>${person.phone}</p><p>${person.email}</p><p>${person.address}</p></div>
+      <div><p>${person.document}</p><p>${person.phone}</p><p>${person.email}</p><p>${person.address}</p>${person.photoPath ? `<p>${person.photoPath}</p>` : ''}</div>
     </div>
     <div class="profile-stats">
       <span><strong>${person.loansCount}</strong>Prestamos</span>
       <span><strong>${person.punctualLoans}</strong>Puntuales</span>
       <span><strong>${personLoans.length}</strong>Activos</span>
+      <span><strong>${personAudios.length}</strong>Audios</span>
     </div>
+    <div class="profile-actions"><button class="small-button" data-action="audioEmpeno" type="button">${icons.audio} Registrar audio</button></div>
     <div class="loan-stack">
       ${
         personLoans.length === 0
           ? '<p class="empty">Sin prestamos activos.</p>'
           : personLoans.map((loan) => `<div class="loan-item"><div><strong>${loan.id}</strong><small>Saldo ${money(loanBalance(loan))}</small></div>${badge(loan.status)}</div>`).join('')
+      }
+    </div>
+    <div class="audio-list">
+      ${
+        personAudios.length === 0
+          ? '<p class="empty">Sin audios de empeno.</p>'
+          : personAudios.map((audio) => `<div class="audio-item"><div><strong>${audio.filePath}</strong><small>${audio.mimeType} / ${Math.round(audio.durationMs / 1000)}s / ${audio.recordedAt}</small></div>${badge(audio.status)}</div>`).join('')
       }
     </div>`;
 }
@@ -913,7 +1011,11 @@ function drawer(panel) {
     cierreCaja: 'Cerrar caja',
     boleta: 'Vista previa de boleta',
     reversarPago: 'Reversar pago',
-    anularPrestamo: 'Anular prestamo'
+    anularPrestamo: 'Anular prestamo',
+    administrador: 'Agregar administrador',
+    editarAdmin: 'Actualizar administrador',
+    resetAdmin: 'Resetear clave',
+    audioEmpeno: 'Registrar audio de empeno'
   }[panel];
   const body = {
     prestamista: personForm('prestamista'),
@@ -924,7 +1026,11 @@ function drawer(panel) {
     cierreCaja: cashCloseForm(),
     boleta: receiptPreview(),
     reversarPago: reversePaymentForm(),
-    anularPrestamo: voidLoanForm()
+    anularPrestamo: voidLoanForm(),
+    administrador: adminCreateForm(),
+    editarAdmin: adminUpdateForm(),
+    resetAdmin: adminResetPasswordForm(),
+    audioEmpeno: collateralAudioForm()
   }[panel];
   return `<div class="drawer-backdrop"><aside class="drawer"><div class="drawer-header"><h2>${title}</h2><button class="icon-button" id="closeDrawer" type="button">x</button></div>${body}</aside></div>`;
 }
@@ -939,6 +1045,66 @@ function personForm(kind) {
     <label>Direccion<input name="address" placeholder="Direccion localizable"></label>
     <p class="form-error" hidden></p>
     <button class="primary-button" type="submit">${icons.plus} Registrar ${kind}</button>
+  </form>`;
+}
+
+function adminCreateForm() {
+  return `<form class="form-stack" id="adminCreateForm">
+    <label>Tipo<select name="type"><option value="natural">Persona natural</option><option value="empresa">Empresa</option></select></label>
+    <label>Nombre o razon social<input name="name" placeholder="Sin numeros"></label>
+    <label>DNI o RUC<input name="document" placeholder="Documento localizable"></label>
+    <label>Celular<input name="phone" placeholder="999 000 000"></label>
+    <label>Correo<input name="email" placeholder="correo@example.local"></label>
+    <label>Direccion<input name="address" placeholder="Direccion localizable"></label>
+    <div class="form-grid"><label>Usuario<input name="username" placeholder="admin.operativo"></label><label>Nivel<select name="adminLevel"><option value="1">Nivel 1</option><option value="2" selected>Nivel 2</option><option value="3">Nivel 3</option></select></label></div>
+    <label>Clave temporal<input name="password" type="password" value="${DEV_PASSWORD}"></label>
+    <label class="check-row"><input name="asBorrower" type="checkbox" value="1"> Tambien puede recibir prestamos</label>
+    <p class="form-error" hidden></p>
+    <button class="primary-button" type="submit">${icons.shield} Crear administrador</button>
+  </form>`;
+}
+
+function adminUpdateForm() {
+  const admin = adminUsers.find((item) => item.id === state.targetAdminId) || adminUsers[0];
+  return `<form class="form-stack" id="adminUpdateForm">
+    <div class="calc-box"><span>Administrador: ${admin?.name || '-'}</span><span>Usuario: ${admin?.username || '-'}</span><span>Estado actual: ${admin?.status || '-'}</span></div>
+    <label>Nivel<select name="adminLevel">
+      <option value="1" ${admin?.adminLevel === 1 ? 'selected' : ''}>Nivel 1</option>
+      <option value="2" ${admin?.adminLevel === 2 ? 'selected' : ''}>Nivel 2</option>
+      <option value="3" ${admin?.adminLevel === 3 ? 'selected' : ''}>Nivel 3</option>
+    </select></label>
+    <label>Estado<select name="status"><option value="activo" ${admin?.status === 'activo' ? 'selected' : ''}>Activo</option><option value="inactivo" ${admin?.status === 'inactivo' ? 'selected' : ''}>Inactivo</option></select></label>
+    <label>Motivo<input name="reason" placeholder="Motivo obligatorio"></label>
+    <p class="form-error" hidden></p>
+    <button class="primary-button" type="submit">${icons.shield} Actualizar administrador</button>
+  </form>`;
+}
+
+function adminResetPasswordForm() {
+  const admin = adminUsers.find((item) => item.id === state.targetAdminId) || adminUsers[0];
+  return `<form class="form-stack" id="adminResetPasswordForm">
+    <div class="calc-box"><span>Administrador: ${admin?.name || '-'}</span><span>Usuario: ${admin?.username || '-'}</span><span>Se revocaran sus sesiones activas.</span></div>
+    <label>Nueva clave temporal<input name="password" type="password" value="${DEV_PASSWORD}"></label>
+    <label>Motivo<input name="reason" placeholder="Motivo obligatorio"></label>
+    <p class="form-error" hidden></p>
+    <button class="primary-button danger-primary" type="submit">${icons.key} Resetear clave</button>
+  </form>`;
+}
+
+function collateralAudioForm() {
+  const person = people.find((item) => item.id === state.selectedPersonId) || people[0];
+  const personLoans = loans.filter((loan) => loan.lenderId === person?.id && loan.status !== 'anulado');
+  const fileName = `${slugify(person?.name || 'persona')}-${today}.webm`;
+  return `<form class="form-stack" id="collateralAudioForm">
+    <div class="calc-box"><span>Persona: ${person?.name || '-'}</span><span>El archivo queda como ruta local y hash, no como blob.</span></div>
+    <label>Prestamo relacionado<select name="loanId"><option value="">Solo persona</option>${personLoans.map((loan) => `<option value="${loan.id}">${loan.id} - ${money(loan.capital)}</option>`).join('')}</select></label>
+    <label>Ruta local<input name="filePath" value=".data/audio/${fileName}"></label>
+    <div class="form-grid"><label>Tipo<select name="mimeType"><option value="audio/webm">audio/webm</option><option value="audio/wav">audio/wav</option><option value="audio/mpeg">audio/mpeg</option><option value="audio/mp4">audio/mp4</option><option value="audio/ogg">audio/ogg</option></select></label><label>Duracion ms<input name="durationMs" type="number" value="30000" min="1"></label></div>
+    <label>SHA-256<input name="sha256" value="${'a'.repeat(64)}"></label>
+    <label>Nota<input name="note" placeholder="Detalle opcional del empeno o garantia"></label>
+    <label class="check-row"><input name="consentRecorded" type="checkbox" value="1" checked> Consentimiento de grabacion registrado</label>
+    <p class="form-error" hidden></p>
+    <button class="primary-button" type="submit">${icons.audio} Guardar metadata de audio</button>
   </form>`;
 }
 
@@ -1044,7 +1210,17 @@ function bindEvents() {
     button.addEventListener('click', () => {
       const action = button.getAttribute('data-action');
       const permission =
-        action === 'boleta' ? 'report' : action === 'prestamista' || action === 'asociado' ? 'people' : action === 'ingresoCaja' || action === 'cierreCaja' ? 'cash' : 'loan';
+        action === 'boleta'
+          ? 'report'
+          : action === 'prestamista' || action === 'asociado'
+            ? 'people'
+            : action === 'ingresoCaja' || action === 'cierreCaja'
+              ? 'cash'
+              : action === 'administrador'
+                ? 'admin'
+                : action === 'audioEmpeno'
+                  ? 'loan'
+                  : 'loan';
       requirePermission(permission, action);
     });
   });
@@ -1084,6 +1260,24 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll('[data-edit-admin]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!can('admin')) return toast('permisos no autorizados');
+      state.targetAdminId = button.getAttribute('data-edit-admin');
+      state.panel = 'editarAdmin';
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-reset-admin]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!can('admin')) return toast('permisos no autorizados');
+      state.targetAdminId = button.getAttribute('data-reset-admin');
+      state.panel = 'resetAdmin';
+      render();
+    });
+  });
+
   document.querySelector('#closeDrawer')?.addEventListener('click', () => {
     state.panel = null;
     saveApp();
@@ -1099,6 +1293,10 @@ function bindEvents() {
   document.querySelector('#cashCloseForm')?.addEventListener('submit', submitCashClose);
   document.querySelector('#reversePaymentForm')?.addEventListener('submit', submitReversePayment);
   document.querySelector('#voidLoanForm')?.addEventListener('submit', submitVoidLoan);
+  document.querySelector('#adminCreateForm')?.addEventListener('submit', submitAdminCreate);
+  document.querySelector('#adminUpdateForm')?.addEventListener('submit', submitAdminUpdate);
+  document.querySelector('#adminResetPasswordForm')?.addEventListener('submit', submitAdminResetPassword);
+  document.querySelector('#collateralAudioForm')?.addEventListener('submit', submitCollateralAudio);
 }
 
 function bindAuthEvents() {
@@ -1208,6 +1406,211 @@ async function submitPerson(event) {
   };
   people.unshift(person);
   state.selectedPersonId = person.id;
+  state.panel = null;
+  saveApp();
+  render();
+}
+
+async function submitAdminCreate(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const error = form.querySelector('.form-error');
+  if (!data.name || /\d/.test(data.name)) return showError(error, 'El nombre es obligatorio y no debe contener numeros.');
+  if (!data.document || !data.phone || !data.address) return showError(error, 'Documento, celular y direccion son obligatorios.');
+  if (data.email && !String(data.email).includes('@')) return showError(error, 'Correo invalido.');
+  if (String(data.password || '').length < 10) return showError(error, 'La clave temporal debe tener al menos 10 caracteres.');
+
+  if (state.backendOnline) {
+    try {
+      await api('/admins', {
+        method: 'POST',
+        body: {
+          type: data.type,
+          name: data.name,
+          document: data.document,
+          phone: data.phone,
+          email: data.email,
+          address: data.address,
+          username: data.username,
+          password: data.password,
+          adminLevel: Number(data.adminLevel),
+          roles: data.asBorrower ? ['Prestamista'] : []
+        }
+      });
+      state.panel = null;
+      state.activeView = 'administradores';
+      await syncFromBackend();
+      return;
+    } catch (backendError) {
+      return showError(error, backendError.message);
+    }
+  }
+
+  const person = {
+    id: `p-${Date.now()}`,
+    type: data.type,
+    name: data.name,
+    document: data.document,
+    phone: data.phone,
+    email: data.email || 'sin-correo@example.local',
+    address: data.address,
+    photoPath: '',
+    roles: ['Administrador', ...(data.asBorrower ? ['Prestamista'] : [])],
+    credit: 'nuevo',
+    loansCount: 0,
+    punctualLoans: 0,
+    registeredBy: admins.find((admin) => admin.level === state.adminLevel).name
+  };
+  const admin = {
+    id: `admin-${Date.now()}`,
+    name: person.name,
+    username: data.username || slugify(person.name),
+    adminLevel: Number(data.adminLevel),
+    status: 'activo',
+    personId: person.id,
+    personName: person.name,
+    createdBy: 'demo-local',
+    mustChangePassword: true
+  };
+  people.unshift(person);
+  adminUsers.unshift(admin);
+  state.selectedPersonId = person.id;
+  state.activeView = 'administradores';
+  state.panel = null;
+  saveApp();
+  render();
+}
+
+async function submitAdminUpdate(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const error = form.querySelector('.form-error');
+  if (!state.targetAdminId) return showError(error, 'Selecciona un administrador.');
+  if (!String(data.reason || '').trim()) return showError(error, 'El motivo es obligatorio.');
+
+  if (state.backendOnline) {
+    try {
+      await api('/admins/update', {
+        method: 'POST',
+        body: {
+          adminId: state.targetAdminId,
+          adminLevel: Number(data.adminLevel),
+          status: data.status,
+          reason: data.reason
+        }
+      });
+      state.panel = null;
+      state.targetAdminId = '';
+      state.activeView = 'administradores';
+      await syncFromBackend();
+      return;
+    } catch (backendError) {
+      return showError(error, backendError.message);
+    }
+  }
+
+  const admin = adminUsers.find((item) => item.id === state.targetAdminId);
+  if (admin) {
+    admin.adminLevel = Number(data.adminLevel);
+    admin.status = data.status;
+  }
+  state.panel = null;
+  state.targetAdminId = '';
+  state.activeView = 'administradores';
+  saveApp();
+  render();
+}
+
+async function submitAdminResetPassword(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const error = form.querySelector('.form-error');
+  if (!state.targetAdminId) return showError(error, 'Selecciona un administrador.');
+  if (String(data.password || '').length < 10) return showError(error, 'La nueva clave debe tener al menos 10 caracteres.');
+  if (!String(data.reason || '').trim()) return showError(error, 'El motivo es obligatorio.');
+
+  if (state.backendOnline) {
+    try {
+      await api('/admins/reset-password', {
+        method: 'POST',
+        body: {
+          adminId: state.targetAdminId,
+          password: data.password,
+          reason: data.reason
+        }
+      });
+      toast('Clave reseteada');
+      state.panel = null;
+      state.targetAdminId = '';
+      state.activeView = 'administradores';
+      await syncFromBackend();
+      return;
+    } catch (backendError) {
+      return showError(error, backendError.message);
+    }
+  }
+
+  const admin = adminUsers.find((item) => item.id === state.targetAdminId);
+  if (admin) admin.mustChangePassword = true;
+  state.panel = null;
+  state.targetAdminId = '';
+  state.activeView = 'administradores';
+  saveApp();
+  render();
+}
+
+async function submitCollateralAudio(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const error = form.querySelector('.form-error');
+  const person = people.find((item) => item.id === state.selectedPersonId);
+  if (!person) return showError(error, 'Selecciona una persona.');
+  if (!String(data.filePath || '').trim()) return showError(error, 'La ruta local es obligatoria.');
+  if (!/^[a-f0-9]{64}$/i.test(String(data.sha256 || '').trim())) return showError(error, 'SHA-256 invalido.');
+  if (Number(data.durationMs) <= 0) return showError(error, 'La duracion debe ser positiva.');
+  if (!data.consentRecorded) return showError(error, 'El consentimiento de grabacion es obligatorio.');
+
+  if (state.backendOnline) {
+    try {
+      await api('/collateral-audios', {
+        method: 'POST',
+        body: {
+          personId: person.id,
+          loanId: data.loanId || undefined,
+          filePath: data.filePath,
+          mimeType: data.mimeType,
+          durationMs: Number(data.durationMs),
+          sha256: String(data.sha256).toLowerCase(),
+          note: data.note,
+          consentRecorded: true
+        }
+      });
+      state.panel = null;
+      await syncFromBackend();
+      return;
+    } catch (backendError) {
+      return showError(error, backendError.message);
+    }
+  }
+
+  collateralAudios.unshift({
+    id: `audio-${Date.now()}`,
+    personId: person.id,
+    loanId: data.loanId || '',
+    filePath: data.filePath,
+    mimeType: data.mimeType,
+    durationMs: Number(data.durationMs),
+    sha256: String(data.sha256).toLowerCase(),
+    note: data.note || '',
+    consentRecorded: true,
+    recordedBy: 'demo-local',
+    recordedAt: today,
+    status: 'activo'
+  });
   state.panel = null;
   saveApp();
   render();
