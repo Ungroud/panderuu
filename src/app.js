@@ -1,4 +1,7 @@
-const today = '2026-06-26';
+const API_BASE = 'http://localhost:5180';
+const DEV_USERNAME = 'admin.seed';
+const DEV_PASSWORD = 'Panderuu123!';
+const today = new Date().toISOString().slice(0, 10);
 
 const admins = [
   { name: 'Admin Semilla', level: 3 },
@@ -138,6 +141,9 @@ const state = {
   activeView: 'dashboard',
   selectedPersonId: 'p-001',
   panel: null,
+  backendOnline: false,
+  backendMessage: 'Modo demo local',
+  authToken: '',
   receipt: {
     number: 'BOL-2026-0001',
     person: 'Cliente Demo Nuevo',
@@ -173,6 +179,9 @@ function saveApp() {
           adminLevel: state.adminLevel,
           activeView: state.activeView,
           selectedPersonId: state.selectedPersonId,
+          backendOnline: state.backendOnline,
+          backendMessage: state.backendMessage,
+          authToken: state.authToken,
           receipt: state.receipt
         }
       })
@@ -201,7 +210,172 @@ function loadApp() {
 
 function resetDemo() {
   localStorage.removeItem('panderuu-demo-state');
+  localStorage.removeItem('panderuu-auth-token');
   location.reload();
+}
+
+function centsToSoles(cents) {
+  return Number(cents || 0) / 100;
+}
+
+function solesToCents(value) {
+  return Math.round(Number(value || 0) * 100);
+}
+
+async function api(path, options = {}) {
+  const headers = {
+    'content-type': 'application/json',
+    ...(options.headers || {})
+  };
+  if (state.authToken) headers.authorization = `Bearer ${state.authToken}`;
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+    body: options.body && typeof options.body !== 'string' ? JSON.stringify(options.body) : options.body
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok === false) {
+    throw new Error(payload.error || `Error HTTP ${response.status}`);
+  }
+  return payload.data;
+}
+
+async function ensureBackendSession() {
+  state.authToken = state.authToken || localStorage.getItem('panderuu-auth-token') || '';
+  if (state.authToken) {
+    try {
+      const current = await api('/auth/me');
+      state.adminLevel = Number(current.actor.adminLevel || state.adminLevel);
+      return;
+    } catch {
+      state.authToken = '';
+      localStorage.removeItem('panderuu-auth-token');
+    }
+  }
+
+  const login = await api('/auth/login', {
+    method: 'POST',
+    body: { username: DEV_USERNAME, password: DEV_PASSWORD }
+  });
+  state.authToken = login.token;
+  state.adminLevel = Number(login.actor.adminLevel || state.adminLevel);
+  localStorage.setItem('panderuu-auth-token', state.authToken);
+}
+
+async function syncFromBackend() {
+  try {
+    await ensureBackendSession();
+    const backend = await api('/state');
+    applyBackendState(backend);
+    state.backendOnline = true;
+    state.backendMessage = `Backend v${backend.version}`;
+    saveApp();
+    render();
+  } catch (error) {
+    state.backendOnline = false;
+    state.backendMessage = `Demo local: ${error.message}`;
+    render();
+  }
+}
+
+function applyBackendState(backend) {
+  people = (backend.people || []).map((person) => ({
+    id: person.id,
+    type: person.type,
+    name: person.name,
+    document: person.document,
+    phone: person.phone,
+    email: person.email,
+    address: person.address,
+    roles: person.roles || [],
+    credit: String(person.creditStatus || 'nuevo').replace('_', ' '),
+    loansCount: Number(person.loansCount || 0),
+    punctualLoans: Number(person.punctualLoans || 0),
+    registeredBy: person.registeredBy || 'Sistema'
+  }));
+
+  const quotasByLoan = new Map();
+  for (const quota of backend.quotas || []) {
+    if (!quotasByLoan.has(quota.loanId)) quotasByLoan.set(quota.loanId, []);
+    quotasByLoan.get(quota.loanId).push(quota);
+  }
+
+  loans = (backend.loans || []).map((loan) => {
+    const loanQuotas = (quotasByLoan.get(loan.id) || []).filter((quota) => quota.status !== 'pagada' && quota.status !== 'anulada');
+    const nextQuota = loanQuotas.sort((left, right) => left.number - right.number)[0];
+    return {
+      id: loan.id,
+      lenderId: loan.personId,
+      person: loan.personName,
+      capital: centsToSoles(loan.capitalCents),
+      rate: loan.ratePercent,
+      interest: centsToSoles(loan.interestCents),
+      total: centsToSoles(loan.totalCents),
+      paid: centsToSoles(loan.paidCents),
+      months: loan.months,
+      installments: loan.installments,
+      nextDue: nextQuota?.dueDate || '-',
+      status: loan.status,
+      admin: loan.createdBy
+    };
+  });
+
+  payments = (backend.quotas || [])
+    .filter((quota) => quota.status !== 'pagada' && quota.status !== 'anulada')
+    .map((quota) => {
+      const loan = (backend.loans || []).find((item) => item.id === quota.loanId);
+      return {
+        id: quota.id,
+        person: loan?.personName || 'Sin persona',
+        loanId: quota.loanId,
+        amount: centsToSoles(Number(quota.totalCents || 0) - Number(quota.paidCents || 0)),
+        due: quota.dueDate,
+        status: quota.status,
+        installments: quota.number
+      };
+    });
+
+  cashMovements = (backend.cashMovements || []).map((movement) => ({
+    id: movement.id,
+    date: String(movement.at || '').slice(0, 10),
+    type: movement.type,
+    description: movement.description,
+    amount: centsToSoles(movement.amountCents),
+    direction: movement.direction
+  }));
+
+  receipts = (backend.receipts || []).map((receipt) => ({
+    id: receipt.id,
+    number: receipt.number,
+    person: receipt.personName,
+    document: people.find((person) => person.name === receipt.personName)?.document || '',
+    loanAmount: centsToSoles(receipt.capitalCents),
+    rate: receipt.ratePercent,
+    interest: centsToSoles(receipt.interestCents),
+    mora: centsToSoles(receipt.moraCents),
+    period: receipt.installmentsClosed,
+    date: String(receipt.issuedAt || '').slice(0, 10),
+    total: centsToSoles(receipt.totalCents),
+    paid: centsToSoles(receipt.paidCents),
+    balance: centsToSoles(receipt.balanceCents),
+    status: receipt.status,
+    admin: receipt.issuedBy
+  }));
+
+  cashClosures = (backend.cashClosures || []).map((close) => ({
+    id: close.id,
+    date: String(close.at || '').slice(0, 10),
+    range: close.range,
+    expected: centsToSoles(close.expectedCents),
+    counted: centsToSoles(close.countedCents),
+    difference: centsToSoles(close.differenceCents),
+    reason: close.reason
+  }));
+
+  if (!people.some((person) => person.id === state.selectedPersonId)) {
+    state.selectedPersonId = people[0]?.id || '';
+  }
+  if (receipts[0]) state.receipt = receipts[0];
 }
 
 const icons = {
@@ -302,6 +476,7 @@ function render() {
             <h1>${title}</h1>
           </div>
           <div class="topbar-actions">
+            <span class="backend-status ${state.backendOnline ? 'online' : 'offline'}">${state.backendMessage}</span>
             <label class="search-box">${icons.dashboard}<input placeholder="Buscar persona, prestamo o boleta"></label>
             <label class="admin-level">${icons.shield}
               <select id="adminLevel">
@@ -623,7 +798,7 @@ function loanForm() {
 
 function paymentForm() {
   return `<form class="form-stack" id="paymentForm">
-    <label>Prestamo<select name="loan">${loans.filter((loan) => loan.status !== 'pagado').map((loan) => `<option value="${loan.id}">${loan.id} - ${loan.person}</option>`).join('')}</select></label>
+    <label>Prestamo<select name="loan">${loans.filter((loan) => loan.status !== 'pagado' && loan.status !== 'anulado').map((loan) => `<option value="${loan.id}">${loan.id} - ${loan.person}</option>`).join('')}</select></label>
     <label>Monto recibido<input name="amount" type="number" value="157.5" min="1"></label>
     <label>Cuotas a cerrar<input name="installments" type="number" value="1" min="1"></label>
     <div class="calc-box">El pago aumenta caja unica y genera boleta. En backend se separara capital, interes y mora.</div>
@@ -717,7 +892,7 @@ function bindEvents() {
     render();
   });
 
-  document.querySelector('#printReceipt')?.addEventListener('click', () => window.print());
+  document.querySelector('#printReceipt')?.addEventListener('click', printCurrentReceipt);
   document.querySelector('#personForm')?.addEventListener('submit', submitPerson);
   document.querySelector('#loanForm')?.addEventListener('input', updateLoanCalc);
   document.querySelector('#loanForm')?.addEventListener('submit', submitLoan);
@@ -726,7 +901,7 @@ function bindEvents() {
   document.querySelector('#cashCloseForm')?.addEventListener('submit', submitCashClose);
 }
 
-function submitPerson(event) {
+async function submitPerson(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
@@ -736,6 +911,28 @@ function submitPerson(event) {
   if (data.email && !String(data.email).includes('@')) return showError(error, 'Correo invalido.');
 
   const kind = form.getAttribute('data-kind');
+  if (state.backendOnline) {
+    try {
+      await api('/people', {
+        method: 'POST',
+        body: {
+          type: data.type,
+          name: data.name,
+          document: data.document,
+          phone: data.phone,
+          email: data.email,
+          address: data.address,
+          roles: kind === 'prestamista' ? ['Prestamista'] : ['Asociado']
+        }
+      });
+      state.panel = null;
+      await syncFromBackend();
+      return;
+    } catch (backendError) {
+      return showError(error, backendError.message);
+    }
+  }
+
   const person = {
     id: `p-${Date.now()}`,
     type: data.type,
@@ -767,7 +964,7 @@ function updateLoanCalc() {
   form.querySelector('#loanCalc').textContent = `Interes generado: ${money(interest)} | Total: ${money(capital + interest)} | Cuota: ${money((capital + interest) / installments)}`;
 }
 
-function submitLoan(event) {
+async function submitLoan(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
@@ -779,6 +976,26 @@ function submitLoan(event) {
   const error = form.querySelector('.form-error');
   if (!lender || capital <= 0 || months <= 0 || installments <= 0) return showError(error, 'Capital, meses y cuotas deben ser mayores a cero.');
   if ((lender.credit === 'nuevo' || lender.punctualLoans < 2) && capital > 150) return showError(error, 'Prestamista nuevo: maximo S/ 150 salvo autorizacion administrativa.');
+
+  if (state.backendOnline) {
+    try {
+      await api('/loans', {
+        method: 'POST',
+        body: {
+          personId: lender.id,
+          capitalCents: solesToCents(capital),
+          ratePercent: rate,
+          months,
+          installments
+        }
+      });
+      state.panel = null;
+      await syncFromBackend();
+      return;
+    } catch (backendError) {
+      return showError(error, backendError.message);
+    }
+  }
 
   const interest = Number((capital * (rate / 100)).toFixed(2));
   const total = capital + interest;
@@ -793,7 +1010,7 @@ function submitLoan(event) {
   render();
 }
 
-function submitPayment(event) {
+async function submitPayment(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
@@ -801,6 +1018,26 @@ function submitPayment(event) {
   const amount = Number(data.amount);
   const error = form.querySelector('.form-error');
   if (!loan || amount <= 0) return showError(error, 'Selecciona un prestamo y registra monto positivo.');
+
+  if (state.backendOnline) {
+    try {
+      const result = await api('/payments', {
+        method: 'POST',
+        body: {
+          loanId: loan.id,
+          amountCents: solesToCents(amount)
+        }
+      });
+      state.panel = result.receipt ? 'boleta' : null;
+      await syncFromBackend();
+      const createdReceipt = receipts.find((receipt) => receipt.id === result.receipt?.id);
+      if (createdReceipt) state.receipt = createdReceipt;
+      render();
+      return;
+    } catch (backendError) {
+      return showError(error, backendError.message);
+    }
+  }
 
   loan.paid = Math.min(loan.total, loan.paid + amount);
   loan.status = loan.paid >= loan.total ? 'pagado' : loan.status;
@@ -812,13 +1049,29 @@ function submitPayment(event) {
   render();
 }
 
-function submitCashIncome(event) {
+async function submitCashIncome(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
   const amount = Number(data.amount);
   const error = form.querySelector('.form-error');
   if (amount <= 0 || !String(data.reason || '').trim()) return showError(error, 'Monto positivo y justificacion son obligatorios.');
+
+  if (state.backendOnline) {
+    try {
+      await api('/cash/income', {
+        method: 'POST',
+        body: { amountCents: solesToCents(amount), reason: data.reason }
+      });
+      state.panel = null;
+      state.activeView = 'caja';
+      await syncFromBackend();
+      return;
+    } catch (backendError) {
+      return showError(error, backendError.message);
+    }
+  }
+
   cashMovements.unshift({ id: `cash-${Date.now()}`, date: today, type: 'ingreso', description: data.reason, amount, direction: 'entrada' });
   state.panel = null;
   state.activeView = 'caja';
@@ -826,7 +1079,7 @@ function submitCashIncome(event) {
   render();
 }
 
-function submitCashClose(event) {
+async function submitCashClose(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
@@ -835,6 +1088,26 @@ function submitCashClose(event) {
   const difference = Number((counted - expected).toFixed(2));
   const error = form.querySelector('.form-error');
   if (difference !== 0 && !String(data.reason || '').trim()) return showError(error, 'La diferencia requiere observacion obligatoria.');
+
+  if (state.backendOnline) {
+    try {
+      await api('/cash/close', {
+        method: 'POST',
+        body: {
+          countedCents: solesToCents(counted),
+          range: data.range,
+          reason: data.reason
+        }
+      });
+      state.panel = null;
+      state.activeView = 'caja';
+      await syncFromBackend();
+      return;
+    } catch (backendError) {
+      return showError(error, backendError.message);
+    }
+  }
+
   cashClosures.unshift({ id: `close-${Date.now()}`, date: today, range: data.range, expected, counted, difference, reason: data.reason || 'Sin diferencia' });
   state.panel = null;
   state.activeView = 'caja';
@@ -847,5 +1120,22 @@ function showError(error, message) {
   error.textContent = message;
 }
 
+async function printCurrentReceipt() {
+  if (state.backendOnline && state.receipt?.id) {
+    try {
+      await api('/receipts/print', {
+        method: 'POST',
+        body: { receiptId: state.receipt.id, reason: 'Impresion solicitada desde dashboard' }
+      });
+      toast('Boleta registrada para impresion');
+    } catch (error) {
+      toast(error.message);
+      return;
+    }
+  }
+  window.print();
+}
+
 loadApp();
 render();
+syncFromBackend();

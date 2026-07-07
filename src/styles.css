@@ -38,6 +38,9 @@ h1, h2 { margin: 0; letter-spacing: 0; }
 h1 { max-width: 100%; overflow-wrap: anywhere; font-size: 24px; line-height: 1.2; }
 h2 { font-size: 16px; }
 .topbar-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.backend-status { display: inline-flex; min-height: 30px; align-items: center; border-radius: 999px; padding: 0 10px; font-size: 12px; font-weight: 800; }
+.backend-status.online { background: var(--green-soft); color: var(--green); }
+.backend-status.offline { background: var(--amber-soft); color: var(--amber); }
 .search-box, .admin-level { display: flex; min-height: 38px; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; padding: 0 10px; }
 .search-box input, .admin-level select { min-width: 0; border: 0; outline: 0; background: transparent; color: #1f2933; }
 .search-box { width: min(360px, 45vw); }
