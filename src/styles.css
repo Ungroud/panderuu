@@ -41,6 +41,7 @@ h2 { font-size: 16px; }
 .backend-status { display: inline-flex; min-height: 30px; align-items: center; border-radius: 999px; padding: 0 10px; font-size: 12px; font-weight: 800; }
 .backend-status.online { background: var(--green-soft); color: var(--green); }
 .backend-status.offline { background: var(--amber-soft); color: var(--amber); }
+.session-chip { display: inline-flex; min-height: 30px; align-items: center; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: #344454; padding: 0 10px; font-size: 12px; font-weight: 800; }
 .search-box, .admin-level { display: flex; min-height: 38px; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; padding: 0 10px; }
 .search-box input, .admin-level select { min-width: 0; border: 0; outline: 0; background: transparent; color: #1f2933; }
 .search-box { width: min(360px, 45vw); }
@@ -62,7 +63,13 @@ h2 { font-size: 16px; }
 .action-button:hover, .small-button:hover { border-color: #b9d7ff; background: var(--blue-soft); }
 .primary-button { border: 0; background: var(--green); color: #fff; padding: 0 14px; font-weight: 700; }
 .small-button { min-height: 30px; border: 1px solid var(--border); background: #fff; padding: 0 10px; }
+.danger-button { border-color: #f3b7b7; color: var(--red); }
+.danger-button:hover { border-color: #efa1a1; background: var(--red-soft); }
+.danger-primary { background: var(--red); }
 .icon-button { width: 36px; border: 1px solid var(--border); background: #fff; }
+.auth-shell { display: grid; min-height: 100vh; place-items: center; padding: 24px; background: #f6f8fa; }
+.auth-panel { display: grid; width: min(420px, 100%); gap: 16px; border: 1px solid var(--border); border-radius: 8px; background: #fff; padding: 22px; box-shadow: 0 16px 40px rgb(31 41 51 / 8%); }
+.auth-brand { padding: 0 0 6px; }
 .dashboard-grid, .lower-grid { display: grid; gap: 12px; }
 .dashboard-grid { grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.8fr); }
 .lower-grid { grid-template-columns: minmax(300px, 0.9fr) minmax(300px, 1fr) minmax(300px, 0.9fr); margin-top: 12px; }
@@ -77,7 +84,7 @@ th { color: var(--muted); font-size: 12px; font-weight: 800; }
 .status-badge.nuevo, .status-badge.pendiente, .status-badge.activo, .status-badge.regular { background: var(--blue-soft); color: #184f91; }
 .status-badge.buen-historial, .status-badge.pagada, .status-badge.pagado { background: var(--green-soft); color: #1f7a49; }
 .status-badge.evaluado, .status-badge.parcial, .status-badge.prioritaria { background: var(--amber-soft); color: #8a5b12; }
-.status-badge.vencida, .status-badge.vencido { background: var(--red-soft); color: var(--red); }
+.status-badge.vencida, .status-badge.vencido, .status-badge.reversado, .status-badge.anulado { background: var(--red-soft); color: var(--red); }
 .bar-chart { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; height: 230px; align-items: end; padding-top: 12px; }
 .bar-item { display: grid; align-items: end; gap: 6px; text-align: center; color: var(--muted); }
 .bar-track { display: flex; height: 160px; align-items: end; border-radius: 8px; background: #f0f5fb; padding: 4px; }

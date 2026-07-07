@@ -144,6 +144,13 @@ const state = {
   backendOnline: false,
   backendMessage: 'Modo demo local',
   authToken: '',
+  currentActor: null,
+  mustChangePassword: false,
+  authChecked: false,
+  demoMode: false,
+  loginError: '',
+  targetLoanId: '',
+  targetPaymentId: '',
   receipt: {
     number: 'BOL-2026-0001',
     person: 'Cliente Demo Nuevo',
@@ -163,6 +170,7 @@ const state = {
 
 let receipts = [state.receipt];
 let cashClosures = [];
+let registeredPayments = [];
 
 function saveApp() {
   try {
@@ -175,6 +183,7 @@ function saveApp() {
         cashMovements,
         receipts,
         cashClosures,
+        registeredPayments,
         state: {
           adminLevel: state.adminLevel,
           activeView: state.activeView,
@@ -182,6 +191,11 @@ function saveApp() {
           backendOnline: state.backendOnline,
           backendMessage: state.backendMessage,
           authToken: state.authToken,
+          currentActor: state.currentActor,
+          mustChangePassword: state.mustChangePassword,
+          authChecked: state.authChecked,
+          demoMode: state.demoMode,
+          loginError: state.loginError,
           receipt: state.receipt
         }
       })
@@ -202,6 +216,7 @@ function loadApp() {
     cashMovements = stored.cashMovements || cashMovements;
     receipts = stored.receipts || receipts;
     cashClosures = stored.cashClosures || cashClosures;
+    registeredPayments = stored.registeredPayments || registeredPayments;
     Object.assign(state, stored.state || {});
   } catch (error) {
     console.warn('No se pudo cargar estado local', error);
@@ -242,29 +257,51 @@ async function api(path, options = {}) {
 
 async function ensureBackendSession() {
   state.authToken = state.authToken || localStorage.getItem('panderuu-auth-token') || '';
-  if (state.authToken) {
-    try {
-      const current = await api('/auth/me');
-      state.adminLevel = Number(current.actor.adminLevel || state.adminLevel);
-      return;
-    } catch {
-      state.authToken = '';
-      localStorage.removeItem('panderuu-auth-token');
-    }
+  if (!state.authToken) {
+    throw new Error('Inicia sesion para usar el backend real');
   }
 
+  try {
+    const current = await api('/auth/me');
+    state.currentActor = current.actor;
+    state.adminLevel = Number(current.actor.adminLevel || state.adminLevel);
+    state.mustChangePassword = Boolean(current.actor.mustChangePassword);
+    return current.actor;
+  } catch {
+    state.authToken = '';
+    state.currentActor = null;
+    state.mustChangePassword = false;
+    localStorage.removeItem('panderuu-auth-token');
+    throw new Error('Sesion expirada');
+  }
+}
+
+async function loginWithCredentials(username, password) {
   const login = await api('/auth/login', {
     method: 'POST',
-    body: { username: DEV_USERNAME, password: DEV_PASSWORD }
+    body: { username, password }
   });
   state.authToken = login.token;
+  state.currentActor = login.actor;
   state.adminLevel = Number(login.actor.adminLevel || state.adminLevel);
+  state.mustChangePassword = Boolean(login.mustChangePassword);
+  state.demoMode = false;
+  state.authChecked = true;
+  state.loginError = '';
   localStorage.setItem('panderuu-auth-token', state.authToken);
 }
 
 async function syncFromBackend() {
   try {
+    if (state.demoMode) return;
     await ensureBackendSession();
+    if (state.mustChangePassword) {
+      state.backendOnline = true;
+      state.backendMessage = 'Cambio de clave requerido';
+      saveApp();
+      render();
+      return;
+    }
     const backend = await api('/state');
     applyBackendState(backend);
     state.backendOnline = true;
@@ -276,6 +313,39 @@ async function syncFromBackend() {
     state.backendMessage = `Demo local: ${error.message}`;
     render();
   }
+}
+
+async function initializeAuth() {
+  if (state.demoMode) {
+    state.authChecked = true;
+    render();
+    return;
+  }
+  state.authToken = localStorage.getItem('panderuu-auth-token') || state.authToken || '';
+  if (!state.authToken) {
+    state.authChecked = true;
+    render();
+    return;
+  }
+  await syncFromBackend();
+  state.authChecked = true;
+  render();
+}
+
+async function logout() {
+  try {
+    if (state.authToken) await api('/auth/logout', { method: 'POST', body: {} });
+  } catch {
+    // If logout fails, clear the local session anyway.
+  }
+  state.authToken = '';
+  state.currentActor = null;
+  state.mustChangePassword = false;
+  state.backendOnline = false;
+  state.backendMessage = 'Sesion cerrada';
+  localStorage.removeItem('panderuu-auth-token');
+  saveApp();
+  render();
 }
 
 function applyBackendState(backend) {
@@ -334,6 +404,21 @@ function applyBackendState(backend) {
         installments: quota.number
       };
     });
+
+  registeredPayments = (backend.payments || []).map((payment) => ({
+    id: payment.id,
+    loanId: payment.loanId,
+    person: payment.personName,
+    amount: centsToSoles(payment.amountCents),
+    capital: centsToSoles(payment.capitalCents),
+    interest: centsToSoles(payment.interestCents),
+    mora: centsToSoles(payment.moraCents),
+    installmentsClosed: payment.installmentsClosed,
+    status: payment.status || 'activo',
+    createdAt: String(payment.createdAt || '').slice(0, 10),
+    reversedAt: String(payment.reversedAt || '').slice(0, 10),
+    reversalReason: payment.reversalReason || ''
+  }));
 
   cashMovements = (backend.cashMovements || []).map((movement) => ({
     id: movement.id,
@@ -443,11 +528,61 @@ function viewTitle() {
   return titles[state.activeView] || titles.dashboard;
 }
 
+function loadingShell() {
+  return `<main class="auth-shell"><section class="auth-panel"><div class="brand auth-brand"><div class="brand-mark">P</div><div><strong>Panderuu</strong><span>Inicializando</span></div></div><div class="calc-box">Verificando sesion local.</div></section></main>`;
+}
+
+function loginShell() {
+  return `<main class="auth-shell">
+    <section class="auth-panel">
+      <div class="brand auth-brand"><div class="brand-mark">P</div><div><strong>Panderuu</strong><span>Acceso administrativo</span></div></div>
+      <form class="form-stack" id="loginForm">
+        <label>Usuario<input name="username" value="${DEV_USERNAME}" autocomplete="username"></label>
+        <label>Clave<input name="password" type="password" value="${DEV_PASSWORD}" autocomplete="current-password"></label>
+        ${state.loginError ? `<p class="form-error">${state.loginError}</p>` : '<p class="form-error" hidden></p>'}
+        <button class="primary-button" type="submit">${icons.shield} Iniciar sesion</button>
+        <button class="small-button" id="demoMode" type="button">Usar demo local</button>
+      </form>
+    </section>
+  </main>`;
+}
+
+function changePasswordShell() {
+  return `<main class="auth-shell">
+    <section class="auth-panel">
+      <div class="brand auth-brand"><div class="brand-mark">P</div><div><strong>Cambio de clave</strong><span>${state.currentActor?.username || 'Administrador'}</span></div></div>
+      <form class="form-stack" id="changePasswordForm">
+        <label>Clave actual<input name="currentPassword" type="password" autocomplete="current-password"></label>
+        <label>Nueva clave<input name="newPassword" type="password" autocomplete="new-password"></label>
+        <label>Confirmar clave<input name="confirmPassword" type="password" autocomplete="new-password"></label>
+        <p class="form-error" hidden></p>
+        <button class="primary-button" type="submit">${icons.shield} Actualizar clave</button>
+        <button class="small-button" id="logoutButton" type="button">Cerrar sesion</button>
+      </form>
+    </section>
+  </main>`;
+}
+
 function render() {
+  const app = document.querySelector('#app');
+  if (!state.authChecked) {
+    app.innerHTML = loadingShell();
+    return;
+  }
+  if (!state.authToken && !state.demoMode) {
+    app.innerHTML = loginShell();
+    bindAuthEvents();
+    return;
+  }
+  if (state.mustChangePassword && !state.demoMode) {
+    app.innerHTML = changePasswordShell();
+    bindAuthEvents();
+    return;
+  }
+
   const t = totals();
   const selectedPerson = people.find((person) => person.id === state.selectedPersonId) || people[0];
-  const selectedLoans = loans.filter((loan) => loan.lenderId === selectedPerson.id);
-  const app = document.querySelector('#app');
+  const selectedLoans = selectedPerson ? loans.filter((loan) => loan.lenderId === selectedPerson.id) : [];
   const [section, title] = viewTitle();
 
   app.innerHTML = `
@@ -479,10 +614,11 @@ function render() {
             <span class="backend-status ${state.backendOnline ? 'online' : 'offline'}">${state.backendMessage}</span>
             <label class="search-box">${icons.dashboard}<input placeholder="Buscar persona, prestamo o boleta"></label>
             <label class="admin-level">${icons.shield}
-              <select id="adminLevel">
+              <select id="adminLevel" ${state.backendOnline ? 'disabled' : ''}>
                 ${admins.map((admin) => `<option value="${admin.level}" ${admin.level === state.adminLevel ? 'selected' : ''}>Admin nivel ${admin.level}</option>`).join('')}
               </select>
             </label>
+            ${state.currentActor ? `<span class="session-chip">${state.currentActor.username}</span><button class="small-button" id="logoutButton" type="button">Salir</button>` : ''}
             <button class="small-button" id="resetDemo" type="button">Reiniciar demo</button>
           </div>
         </header>
@@ -585,10 +721,10 @@ function loansSection() {
     <div class="panel">
       <div class="panel-header"><div><p class="eyebrow">Cartera</p><h2>Prestamos y saldos</h2></div>${icons.loan}</div>
       <div class="table-wrap"><table>
-        <thead><tr><th>ID</th><th>Prestamista</th><th>Capital</th><th>Interes</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Proximo</th><th>Estado</th></tr></thead>
+        <thead><tr><th>ID</th><th>Prestamista</th><th>Capital</th><th>Interes</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Proximo</th><th>Estado</th><th>Accion</th></tr></thead>
         <tbody>${loans
           .map(
-            (loan) => `<tr><td>${loan.id}</td><td>${loan.person}</td><td>${money(loan.capital)}</td><td>${loan.rate}% / ${money(loan.interest)}</td><td>${money(loan.total)}</td><td>${money(loan.paid)}</td><td>${money(loanBalance(loan))}</td><td>${loan.nextDue}</td><td>${badge(loan.status)}</td></tr>`
+            (loan) => `<tr><td>${loan.id}</td><td>${loan.person}</td><td>${money(loan.capital)}</td><td>${loan.rate}% / ${money(loan.interest)}</td><td>${money(loan.total)}</td><td>${money(loan.paid)}</td><td>${money(loanBalance(loan))}</td><td>${loan.nextDue}</td><td>${badge(loan.status)}</td><td>${loan.status === 'anulado' ? '-' : `<button class="small-button danger-button" data-void-loan="${loan.id}" type="button">Anular</button>`}</td></tr>`
           )
           .join('')}</tbody>
       </table></div>
@@ -601,6 +737,10 @@ function paymentsSection() {
     <div class="panel">
       <div class="panel-header"><div><p class="eyebrow">Cuotas</p><h2>Pagos pendientes y registrados</h2></div>${icons.receipt}</div>
       ${priorityTable()}
+    </div>
+    <div class="panel">
+      <div class="panel-header"><div><p class="eyebrow">Historial</p><h2>Pagos registrados</h2></div>${icons.receipt}</div>
+      ${registeredPaymentsTable()}
     </div>
   </section>`;
 }
@@ -680,6 +820,21 @@ function priorityTable() {
     </tbody></table></div>`;
 }
 
+function registeredPaymentsTable() {
+  if (registeredPayments.length === 0) return '<p class="empty">Sin pagos registrados.</p>';
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Fecha</th><th>Persona</th><th>Prestamo</th><th>Monto</th><th>Capital</th><th>Interes</th><th>Mora</th><th>Estado</th><th>Accion</th></tr></thead>
+    <tbody>${registeredPayments
+      .map(
+        (payment) => `<tr>
+          <td>${payment.createdAt}</td><td>${payment.person}</td><td>${payment.loanId}</td><td>${money(payment.amount)}</td><td>${money(payment.capital)}</td><td>${money(payment.interest)}</td><td>${money(payment.mora)}</td><td>${badge(payment.status)}</td>
+          <td>${payment.status === 'reversado' ? '-' : `<button class="small-button danger-button" data-reverse-payment="${payment.id}" type="button">Reversar</button>`}</td>
+        </tr>`
+      )
+      .join('')}</tbody>
+  </table></div>`;
+}
+
 function barChart() {
   const max = Math.max(...interestByMonth.map((item) => item.value));
   return `<div class="bar-chart">
@@ -756,7 +911,9 @@ function drawer(panel) {
     pago: 'Registrar pago',
     ingresoCaja: 'Ingresar dinero a caja',
     cierreCaja: 'Cerrar caja',
-    boleta: 'Vista previa de boleta'
+    boleta: 'Vista previa de boleta',
+    reversarPago: 'Reversar pago',
+    anularPrestamo: 'Anular prestamo'
   }[panel];
   const body = {
     prestamista: personForm('prestamista'),
@@ -765,7 +922,9 @@ function drawer(panel) {
     pago: paymentForm(),
     ingresoCaja: cashIncomeForm(),
     cierreCaja: cashCloseForm(),
-    boleta: receiptPreview()
+    boleta: receiptPreview(),
+    reversarPago: reversePaymentForm(),
+    anularPrestamo: voidLoanForm()
   }[panel];
   return `<div class="drawer-backdrop"><aside class="drawer"><div class="drawer-header"><h2>${title}</h2><button class="icon-button" id="closeDrawer" type="button">x</button></div>${body}</aside></div>`;
 }
@@ -828,6 +987,26 @@ function cashCloseForm() {
   </form>`;
 }
 
+function reversePaymentForm() {
+  const payment = registeredPayments.find((item) => item.id === state.targetPaymentId);
+  return `<form class="form-stack" id="reversePaymentForm">
+    <div class="calc-box"><span>Pago: ${payment?.id || '-'}</span><span>Monto: ${money(payment?.amount || 0)}</span><span>Prestamo: ${payment?.loanId || '-'}</span></div>
+    <label>Motivo<input name="reason" placeholder="Motivo obligatorio de reversa"></label>
+    <p class="form-error" hidden></p>
+    <button class="primary-button danger-primary" type="submit">${icons.alert} Reversar pago</button>
+  </form>`;
+}
+
+function voidLoanForm() {
+  const loan = loans.find((item) => item.id === state.targetLoanId);
+  return `<form class="form-stack" id="voidLoanForm">
+    <div class="calc-box"><span>Prestamo: ${loan?.id || '-'}</span><span>Prestamista: ${loan?.person || '-'}</span><span>Capital: ${money(loan?.capital || 0)}</span></div>
+    <label>Motivo<input name="reason" placeholder="Motivo obligatorio de anulacion"></label>
+    <p class="form-error" hidden></p>
+    <button class="primary-button danger-primary" type="submit">${icons.alert} Anular prestamo</button>
+  </form>`;
+}
+
 function receiptPreview() {
   const receipt = state.receipt;
   return `<div class="receipt-area">
@@ -851,6 +1030,7 @@ function bindEvents() {
   });
 
   document.querySelector('#resetDemo')?.addEventListener('click', resetDemo);
+  document.querySelector('#logoutButton')?.addEventListener('click', logout);
 
   document.querySelectorAll('[data-view]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -886,6 +1066,24 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll('[data-reverse-payment]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!can('loan')) return toast('permisos no autorizados');
+      state.targetPaymentId = button.getAttribute('data-reverse-payment');
+      state.panel = 'reversarPago';
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-void-loan]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!can('loan')) return toast('permisos no autorizados');
+      state.targetLoanId = button.getAttribute('data-void-loan');
+      state.panel = 'anularPrestamo';
+      render();
+    });
+  });
+
   document.querySelector('#closeDrawer')?.addEventListener('click', () => {
     state.panel = null;
     saveApp();
@@ -899,6 +1097,67 @@ function bindEvents() {
   document.querySelector('#paymentForm')?.addEventListener('submit', submitPayment);
   document.querySelector('#cashIncomeForm')?.addEventListener('submit', submitCashIncome);
   document.querySelector('#cashCloseForm')?.addEventListener('submit', submitCashClose);
+  document.querySelector('#reversePaymentForm')?.addEventListener('submit', submitReversePayment);
+  document.querySelector('#voidLoanForm')?.addEventListener('submit', submitVoidLoan);
+}
+
+function bindAuthEvents() {
+  document.querySelector('#loginForm')?.addEventListener('submit', submitLogin);
+  document.querySelector('#changePasswordForm')?.addEventListener('submit', submitChangePassword);
+  document.querySelector('#demoMode')?.addEventListener('click', () => {
+    state.demoMode = true;
+    state.backendOnline = false;
+    state.backendMessage = 'Modo demo local';
+    state.authChecked = true;
+    state.loginError = '';
+    saveApp();
+    render();
+  });
+  document.querySelector('#logoutButton')?.addEventListener('click', logout);
+}
+
+async function submitLogin(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const error = form.querySelector('.form-error');
+  try {
+    await loginWithCredentials(data.username, data.password);
+    if (state.mustChangePassword) {
+      state.backendOnline = true;
+      state.backendMessage = 'Cambio de clave requerido';
+      saveApp();
+      render();
+      return;
+    }
+    await syncFromBackend();
+  } catch (loginError) {
+    state.loginError = loginError.message;
+    showError(error, loginError.message);
+    saveApp();
+  }
+}
+
+async function submitChangePassword(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const error = form.querySelector('.form-error');
+  if (data.newPassword !== data.confirmPassword) return showError(error, 'La nueva clave no coincide.');
+  try {
+    const changed = await api('/auth/change-password', {
+      method: 'POST',
+      body: {
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword
+      }
+    });
+    state.currentActor = changed.actor;
+    state.mustChangePassword = false;
+    await syncFromBackend();
+  } catch (changeError) {
+    showError(error, changeError.message);
+  }
 }
 
 async function submitPerson(event) {
@@ -1115,6 +1374,54 @@ async function submitCashClose(event) {
   render();
 }
 
+async function submitReversePayment(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const error = form.querySelector('.form-error');
+  if (!String(data.reason || '').trim()) return showError(error, 'El motivo es obligatorio.');
+  if (!state.backendOnline) return showError(error, 'Disponible solo con backend real.');
+  try {
+    await api('/payments/reverse', {
+      method: 'POST',
+      body: {
+        paymentId: state.targetPaymentId,
+        reason: data.reason
+      }
+    });
+    state.panel = null;
+    state.targetPaymentId = '';
+    state.activeView = 'pagos';
+    await syncFromBackend();
+  } catch (backendError) {
+    showError(error, backendError.message);
+  }
+}
+
+async function submitVoidLoan(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const error = form.querySelector('.form-error');
+  if (!String(data.reason || '').trim()) return showError(error, 'El motivo es obligatorio.');
+  if (!state.backendOnline) return showError(error, 'Disponible solo con backend real.');
+  try {
+    await api('/loans/void', {
+      method: 'POST',
+      body: {
+        loanId: state.targetLoanId,
+        reason: data.reason
+      }
+    });
+    state.panel = null;
+    state.targetLoanId = '';
+    state.activeView = 'prestamos';
+    await syncFromBackend();
+  } catch (backendError) {
+    showError(error, backendError.message);
+  }
+}
+
 function showError(error, message) {
   error.hidden = false;
   error.textContent = message;
@@ -1138,4 +1445,4 @@ async function printCurrentReceipt() {
 
 loadApp();
 render();
-syncFromBackend();
+initializeAuth();

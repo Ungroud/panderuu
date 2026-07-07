@@ -2,7 +2,7 @@
 
 ## Navegacion principal
 
-La aplicacion inicia en el dashboard. La navegacion usa sidebar fija con estas secciones:
+La aplicacion inicia en login cuando existe backend real. Si no hay backend disponible, puede entrar en modo demo local. Luego la navegacion usa sidebar fija con estas secciones:
 
 - Dashboard.
 - Prestamistas.
@@ -14,6 +14,16 @@ La aplicacion inicia en el dashboard. La navegacion usa sidebar fija con estas s
 - Reportes.
 - Administradores.
 - Configuracion.
+
+## Login
+
+Flujo:
+
+1. El administrador ingresa usuario y clave.
+2. El frontend solicita token a `/auth/login`.
+3. Si la cuenta exige cambio de clave, muestra formulario de cambio obligatorio.
+4. Si el login es valido, carga `/state` y muestra dashboard con datos reales.
+5. El cierre de sesion revoca token en backend y limpia sesion local.
 
 ## Dashboard
 
@@ -87,6 +97,17 @@ Flujo:
 9. Al desembolsar, se descuenta caja.
 10. Se crean prestamo, cuotas, movimiento de caja y auditoria.
 
+## Anular prestamo
+
+Flujo:
+
+1. Administrador nivel 2 o 3 selecciona prestamo.
+2. Ingresa motivo obligatorio.
+3. Si el prestamo tiene pagos activos, el sistema bloquea la anulacion.
+4. Si no tiene pagos activos, se marca como `anulado`.
+5. Se anulan cuotas y se registra compensacion en caja.
+6. Se registra auditoria.
+
 ## Registrar pago
 
 Flujo:
@@ -100,6 +121,17 @@ Flujo:
 7. Se genera movimiento de caja.
 8. Se ofrece emitir boleta.
 9. El dashboard se actualiza.
+
+## Reversar pago
+
+Flujo:
+
+1. Administrador nivel 2 o 3 abre historial de pagos.
+2. Selecciona pago activo.
+3. Ingresa motivo obligatorio.
+4. El backend marca el pago como `reversado`.
+5. Se reabren cuotas afectadas y se registra salida compensatoria de caja.
+6. Se registra auditoria.
 
 ## Perfil de prestamista
 
@@ -190,4 +222,3 @@ Reportes principales:
 - Pagos del dia.
 - Administradores y acciones.
 - Auditoria.
-
